@@ -34,26 +34,29 @@ Orchestrator (điều phối workflow)
 
 ## Current Status
 
-- **Phase**: Phase 1 — Project Setup & Architecture (in progress)
+- **Phase**: Functional — đang vận hành thực tế với One Piece ch1-300+
 - **Last updated**: 2026-06-01
-- **Active work**: Khởi tạo project, viết code skeleton
-- **Blocked on**: Cần verify HTML structure của onepiecetruyen.net để viết adapter chính xác
+- **Active work**: Vận hành ổn định, không có blocker
+- **Blocked on**: none
 
 ## Key Design Decisions
 
 - **Site adapter pattern**: Mỗi site có 1 adapter class kế thừa BaseAdapter. Core modules không biết gì về HTML structure của từng site. Lý do: dễ thêm site mới mà không sửa core code.
+- **CDN probe thay vì HTML scraping**: onepiecetruyen.net là Next.js — HTML tĩnh chỉ có ~7 ảnh đầu. Probe HEAD request tuần tự lên CDN đến khi 404. URL pattern: `cdn.onepiecetruyen.net/one-piece/vi/chapter-{N}/{page:03d}.webp`.
+- **`total_pages` tách riêng `downloaded_pages`**: `total_pages` = số pages từ CDN probe (source of truth). `downloaded_pages` = số ảnh thực tế save được. `is_images_complete()` chỉ so sánh actual files vs `total_pages`.
 - **EPUB thay vì CBZ**: EPUB là primary format vì Kobo và Kindle đều hỗ trợ tốt hơn CBZ. CBZ là fallback.
 - **10 chapters per EPUB**: Mặc định configurable qua `--batch-size N`. Lý do: file quá lớn load chậm trên e-reader.
-- **chapters.json manifest**: Track state để resume khi bị ngắt giữa chừng. Không re-download chapter đã có.
-- **Rate limiting 1-2s**: Tránh bị block bởi server. Dùng `time.sleep(random.uniform(1, 2))`.
-- **User-Agent spoof**: Dùng browser UA thực để tránh bị detect là bot.
+- **Pack phase filter by range**: Pack phase chỉ xử lý chapters trong `--start-chapter` đến `--end-chapter`. Tránh chapters từ 2 range khác bị gộp khi có gap.
+- **`_reset_missing_epubs` scan file thực tế**: Không dùng `batch_size` để tính tên EPUB — scan file `.epub` trên disk, match chapter key vào range. Batch_size-independent.
+- **Retry 3 lần trong cả downloader và CDN probe**: Exponential backoff 2s/4s/8s. Lý do: 1 network error không được phép làm mất ảnh hoặc dừng probe sớm.
 - **ebooklib cho EPUB**: Thư viện Python thuần, không cần binary dependency như Calibre.
 
 ## Known Issues / Gotchas
 
-- **onepiecetruyen.net HTML structure chưa verify**: Adapter được viết dựa trên pattern thông thường của các manga site Việt Nam. Cần chạy thực tế để xác nhận CSS selectors đúng.
-- **Image hotlinking protection**: Một số site kiểm tra Referer header. Adapter cần set `Referer` đúng.
-- **Chapter numbering**: Một số site dùng số thập phân (ch-100.5 cho chapter đặc biệt). Manifest cần handle edge case này.
+- **CDN probe có thể bị rate limit**: Nếu probe quá nhanh, CDN trả về 429. Đã có handler wait 5s và tiếp tục.
+- **Chapters có `total_pages` rất nhỏ (< 10)**: Dấu hiệu probe bị ngắt sớm do network error trong lần download đầu. Kiểm tra bằng script trong daily-operations.md mục 3.
+- **Chapter numbering thập phân**: Một số chapter có số (100.5) — manifest xử lý bằng format `100_5`. Chưa gặp thực tế với One Piece.
+- **`--batch-size` nên nhất quán**: Tool không lưu batch_size vào manifest — nếu thay đổi giữa chừng, EPUB filename sẽ khác nhau nhưng không gây lỗi.
 
 ## API / Interface Map
 
@@ -80,3 +83,16 @@ Orchestrator (điều phối workflow)
 **Files thay đổi:** `CLAUDE.md`, `docs/AI_CONTEXT.md`, `.planning/STATE.md`, `.planning/ROADMAP.md`, `docs/error_ledger.md`, `docs/runbooks/daily-operations.md`
 **Mô tả:** Khởi tạo project structure từ claude-template.init. Thiết lập architecture với site adapter pattern, viết skeleton code cho tất cả các modules.
 **Lưu ý deploy:** Chạy `pip install -r requirements.txt` trước khi dùng.
+
+### 2026-06-01 — [Full implementation + 7 bug fixes, tool vận hành thực tế]
+**Files thay đổi:** `src/adapters/onepiecetruyen.py`, `src/downloader.py`, `src/manifest.py`, `src/packager.py`, `main.py`, `README.md`, `claude-template.init`, `docs/*`, `.planning/STATE.md`
+**Mô tả:** Toàn bộ tool được implement và chạy thực tế với One Piece ch1-300+. 7 bugs được phát hiện và fix trong quá trình vận hành:
+- ERR-001: Next.js lazy loading → chuyển từ HTML scraping sang CDN probe
+- ERR-002: Extension hardcode `.jpg` → lấy từ URL
+- ERR-003: Không retry khi download lỗi → exponential backoff 3 lần
+- ERR-004: `image_count` lưu sai → thêm `total_pages` tách biệt
+- ERR-005: CDN probe `break` khi network error → retry trong `_probe_page()`
+- ERR-006: `_reset_missing_epubs` dùng `batch_size` → scan file thực tế
+- ERR-007: Pack phase pool toàn manifest → filter by `range_keys`
+- Tạo README.md, cập nhật claude-template.init với yêu cầu README
+**Lưu ý deploy:** `--batch-size` nên nhất quán giữa các lần chạy. Dùng `--start-chapter` và `--end-chapter` rõ ràng mỗi lần.

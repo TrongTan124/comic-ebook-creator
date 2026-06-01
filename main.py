@@ -99,24 +99,35 @@ def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, t
 
 
 def _reset_missing_epubs(
-    manifest, packager, output_dir: Path, title: str, batch_size: int, log
+    manifest, output_dir: Path, title: str, range_keys: list[str], log
 ) -> None:
     """
-    Scan chapters marked 'packed' in manifest. For each batch whose EPUB file
-    no longer exists on disk, reset those chapters back to 'downloaded' so they
-    get re-packed on the next run.
+    For packed chapters in the current run's range, check whether an EPUB file
+    actually covers each one. Reset uncovered chapters back to 'downloaded'.
+
+    Intentionally batch_size-independent: scans existing EPUB filenames instead
+    of recomputing expected paths. This prevents runaway resets when a user
+    passes --batch-size that differs from the original packing run.
     """
-    packed = manifest.get_packed_chapters()
-    if not packed:
+    packed_in_range = [k for k in range_keys if manifest.is_packed(k)]
+    if not packed_in_range:
         return
 
-    for batch_start in range(0, len(packed), batch_size):
-        batch_keys = packed[batch_start : batch_start + batch_size]
-        start, end = batch_keys[0], batch_keys[-1]
-        epub_path = output_dir / f"{title}_ch{start}-{end}.epub"
-        if not epub_path.exists():
-            log.info(f"EPUB missing for chapters {start}-{end}, resetting to re-pack")
-            manifest.reset_to_downloaded(batch_keys)
+    # Build coverage from actual EPUB files on disk
+    covered: set[str] = set()
+    for epub in output_dir.glob(f"{title}_ch*.epub"):
+        parts = epub.stem.split("_ch")[-1].split("-")
+        if len(parts) != 2:
+            continue
+        start_key, end_key = parts[0], parts[1]
+        for key in packed_in_range:
+            if start_key <= key <= end_key:
+                covered.add(key)
+
+    uncovered = [k for k in packed_in_range if k not in covered]
+    if uncovered:
+        log.info(f"EPUB missing for {len(uncovered)} chapter(s) in range, resetting to re-pack")
+        manifest.reset_to_downloaded(uncovered)
 
 
 def run(args: argparse.Namespace) -> None:
@@ -188,11 +199,15 @@ def run(args: argparse.Namespace) -> None:
         else:
             log.warning(f"[{key}] No images saved")
 
-    # --- Repair: reset chapters whose EPUB was deleted ---
-    _reset_missing_epubs(manifest, packager, output_dir, args.title, args.batch_size, log)
+    # --- Repair: reset chapters in range whose EPUB is missing ---
+    range_keys = [chapter_key(u, i) for i, u in enumerate(chapter_urls, start=start + 1)]
+    _reset_missing_epubs(manifest, output_dir, args.title, range_keys, log)
 
-    # --- Pack phase ---
-    all_ready = manifest.get_downloaded_chapters()
+    # --- Pack phase: only consider chapters within the current run's range ---
+    # Pooling ALL downloaded chapters across the entire manga causes chapters
+    # from different ranges to bleed into the same batch when there are gaps.
+    range_key_set = set(range_keys)
+    all_ready = [k for k in manifest.get_downloaded_chapters() if k in range_key_set]
     if not all_ready:
         existing_epubs = sorted(output_dir.glob("*.epub"))
         if existing_epubs:

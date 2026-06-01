@@ -69,28 +69,21 @@ class OnePieceTruyenAdapter(BaseAdapter):
 
         for page in range(1, 600):
             url = f"{cdn_chapter_base}/{page:03d}.webp"
-            try:
-                resp = self._session.head(
-                    url,
-                    timeout=8,
-                    headers={"Referer": chapter_url},
-                    allow_redirects=True,
-                )
-                if resp.status_code == 200:
-                    urls.append(url)
-                    consecutive_misses = 0
-                elif resp.status_code == 404:
-                    consecutive_misses += 1
-                    # Allow 1 gap (some chapters skip a page number) but stop after 2
-                    if consecutive_misses >= 2:
-                        break
-                elif resp.status_code == 429:
-                    logger.warning("CDN rate-limited, waiting 5s")
-                    time.sleep(5)
-                # Any other status: keep trying
-            except requests.RequestException as e:
-                logger.warning(f"CDN probe error at page {page}: {e}")
-                break
+            status = self._probe_page(url, chapter_url)
+
+            if status == 200:
+                urls.append(url)
+                consecutive_misses = 0
+            elif status == 404:
+                consecutive_misses += 1
+                if consecutive_misses >= 2:
+                    break
+            elif status == 429:
+                logger.warning("CDN rate-limited, waiting 5s")
+                time.sleep(5)
+            elif status is None:
+                # Network error after retries — skip page, don't stop probe
+                logger.warning(f"Skipping page {page:03d} in probe (network error), continuing")
 
         if urls:
             logger.info(f"Chapter {chapter_num}: {len(urls)} pages found")
@@ -120,6 +113,30 @@ class OnePieceTruyenAdapter(BaseAdapter):
             logger.error("No chapter numbers found on /chapters page")
             return 0
         return max(nums)
+
+    def _probe_page(self, url: str, referer: str, max_retries: int = 3) -> int | None:
+        """
+        HEAD-request a CDN page URL. Returns HTTP status code, or None if all
+        retries fail (network error). Retries prevent a single timeout from
+        truncating the page count.
+        """
+        for attempt in range(1, max_retries + 1):
+            try:
+                resp = self._session.head(
+                    url,
+                    timeout=8,
+                    headers={"Referer": referer},
+                    allow_redirects=True,
+                )
+                return resp.status_code
+            except requests.RequestException as e:
+                wait = 2 ** attempt
+                if attempt < max_retries:
+                    logger.debug(f"Probe attempt {attempt}/{max_retries} failed for {url}: {e}, retrying in {wait}s")
+                    time.sleep(wait)
+                else:
+                    logger.warning(f"Probe failed after {max_retries} attempts for {url}: {e}")
+        return None
 
     @staticmethod
     def _extract_chapter_num(chapter_url: str) -> str | None:

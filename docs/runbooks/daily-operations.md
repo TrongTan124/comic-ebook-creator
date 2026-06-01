@@ -6,27 +6,22 @@
 
 1. [Setup môi trường](#1-setup-môi-trường)
 2. [Chạy tool](#2-chạy-tool)
-3. [Xử lý sự cố thường gặp](#3-xử-lý-sự-cố-thường-gặp)
+3. [Kiểm tra chapter bị thiếu ảnh](#3-kiểm-tra-chapter-bị-thiếu-ảnh)
+4. [Dọn dẹp EPUB sai](#4-dọn-dẹp-epub-sai)
+5. [Xử lý sự cố thường gặp](#5-xử-lý-sự-cố-thường-gặp)
 
 ---
 
 ## 1. Setup môi trường
 
 ```bash
-# Clone repo (nếu chưa có)
 git clone <repo-url>
 cd comic-ebook-creator
 
-# Tạo virtualenv
 python -m venv venv
+source venv/bin/activate        # Linux/macOS
+venv\Scripts\activate           # Windows
 
-# Activate (Linux/macOS)
-source venv/bin/activate
-
-# Activate (Windows)
-venv\Scripts\activate
-
-# Cài dependencies
 pip install -r requirements.txt
 
 # Verify
@@ -35,108 +30,169 @@ python main.py --help
 
 ## 2. Chạy tool
 
-### Crawl và tạo EPUB (thông thường)
+### Download và pack 10 chapters
 
 ```bash
 python main.py \
-  --url "https://onepiecetruyen.net/truyen-tranh/one-piece" \
-  --title "one-piece"
-
-# Verify
-ls output/one-piece/
-# Expected: ch-001/, ch-002/, ..., chapters.json, one-piece_ch001-010.epub
-```
-
-### Crawl với batch size tùy chỉnh
-
-```bash
-python main.py \
-  --url "https://onepiecetruyen.net/truyen-tranh/one-piece" \
-  --title "one-piece" \
-  --batch-size 5
-```
-
-### Crawl range cụ thể
-
-```bash
-python main.py \
-  --url "https://onepiecetruyen.net/truyen-tranh/one-piece" \
+  --url "https://onepiecetruyen.net/chapters" \
   --title "one-piece" \
   --start-chapter 1 \
   --end-chapter 10
+
+# Verify
+ls output/one-piece/*.epub
+# Expected: one-piece_ch001-010.epub
 ```
 
-### Fallback với chapters file
+### QUAN TRỌNG: Luôn chỉ định range rõ ràng
+
+Pack phase chỉ xử lý chapters trong range `--start-chapter` đến `--end-chapter`.
+Nếu muốn pack chapters 1-300 thành 30 file EPUB, chạy từng batch:
 
 ```bash
-# Tạo file chapters.txt với 1 URL per dòng
-cat chapters.txt
-# https://onepiecetruyen.net/chapters/chapter-1
-# https://onepiecetruyen.net/chapters/chapter-2
-
-python main.py \
-  --url "https://onepiecetruyen.net" \
-  --title "one-piece" \
-  --chapters-file chapters.txt
+python main.py --url "..." --title "one-piece" --start-chapter 1   --end-chapter 10
+python main.py --url "..." --title "one-piece" --start-chapter 11  --end-chapter 20
+# ...hoặc dùng --end-chapter lớn để tool tự chia batch:
+python main.py --url "..." --title "one-piece" --start-chapter 1 --end-chapter 100
+# → tạo ra: ch001-010.epub, ch011-020.epub, ..., ch091-100.epub
 ```
 
 ### Resume sau khi bị ngắt
 
 ```bash
-# Chỉ cần chạy lại lệnh gốc — tool tự skip chapters đã download
-python main.py \
-  --url "https://onepiecetruyen.net/truyen-tranh/one-piece" \
-  --title "one-piece"
+# Chạy lại đúng lệnh cũ — tool tự skip chapters đã packed/downloaded
+python main.py --url "..." --title "one-piece" --start-chapter 1 --end-chapter 100
 ```
 
-## 3. Xử lý sự cố thường gặp
-
-### Tool crash ngay khi bắt đầu
-
-**Triệu chứng:** ImportError hoặc ModuleNotFoundError
+### Re-pack EPUB bị xóa (không re-download ảnh)
 
 ```bash
-# Fix
+# Xóa EPUB đi
+del output\one-piece\one-piece_ch001-010.epub
+
+# Chạy lại — tool detect EPUB missing, re-pack từ ảnh đã có
+python main.py --url "..." --title "one-piece" --start-chapter 1 --end-chapter 10
+```
+
+## 3. Kiểm tra chapter bị thiếu ảnh
+
+Chapters có thể bị thiếu ảnh nếu CDN probe gặp network error trong lần download đầu.
+Dấu hiệu: `total_pages` trong manifest rất nhỏ (< 10) so với chapters bình thường (~20 pages).
+
+### Kiểm tra nhanh
+
+```bash
+python -c "
+import json
+from pathlib import Path
+
+d = json.load(open('output/one-piece/chapters.json'))
+suspicious = [
+    (k, v['total_pages'], sum(1 for f in Path(v['folder']).iterdir() if f.suffix in ('.webp','.jpg')))
+    for k, v in d['chapters'].items()
+    if v.get('total_pages') and v['total_pages'] < 10
+]
+for key, total, actual in sorted(suspicious):
+    print(f'ch-{key}: total_pages={total}, actual={actual}')
+"
+```
+
+### Fix chapter thiếu ảnh
+
+```bash
+# Bước 1: Xóa entry khỏi manifest và xóa folder ảnh cũ
+python -c "
+import json, shutil
+from pathlib import Path
+
+CH = '046'  # chapter cần fix
+output = Path('output/one-piece')
+d = json.load(open(output / 'chapters.json'))
+
+# Xoa manifest entry
+d['chapters'].pop(CH, None)
+
+# Xoa folder anh cu
+folder = output / f'ch-{CH}'
+if folder.exists():
+    for f in folder.iterdir(): f.unlink()
+    try: folder.rmdir()
+    except: pass
+
+# Xoa EPUB chua chapter nay (neu biet ten)
+# Bat ky EPUB nao cover ch-NNN se bi invalidate tu dong khi re-download
+
+with open(output / 'chapters.json', 'w') as f:
+    json.dump(d, f, ensure_ascii=False, indent=2)
+print('Done')
+"
+
+# Bước 2: Re-download đúng batch chứa chapter đó
+# Nếu chapter 046 nằm trong batch 041-050:
+python main.py --url "..." --title "one-piece" --start-chapter 41 --end-chapter 50
+```
+
+## 4. Dọn dẹp EPUB sai
+
+### Phát hiện EPUB lẻ (ch-N-N thay vì ch-N-M)
+
+```bash
+python -c "
+import re
+from pathlib import Path
+epubs = list(Path('output/one-piece').glob('*.epub'))
+individual = [e.name for e in epubs if re.search(r'ch(\d+)-\1\.epub', e.name)]
+print(f'Individual EPUBs: {len(individual)}')
+for name in sorted(individual)[:10]:
+    print(f'  {name}')
+"
+```
+
+### Xóa toàn bộ EPUB lẻ
+
+```bash
+python -c "
+import re
+from pathlib import Path
+deleted = 0
+for epub in Path('output/one-piece').glob('*.epub'):
+    if re.search(r'ch(\d+)-\1\.epub', epub.name):
+        epub.unlink()
+        deleted += 1
+print(f'Deleted {deleted} individual EPUBs')
+"
+```
+
+> Sau khi xóa EPUB lẻ, chapters tương ứng sẽ được tự động re-pack theo đúng batch-size khi chạy lại tool.
+
+## 5. Xử lý sự cố thường gặp
+
+### Tool báo "Already packed (N pages)" nhưng N nhỏ bất thường
+
+Nguyên nhân: CDN probe bị ngắt bởi network error → `total_pages` lưu sai.
+Fix: xem mục 3 — kiểm tra và fix chapter thiếu ảnh.
+
+### Tool crash: ImportError
+
+```bash
 pip install -r requirements.txt
-
-# Verify
 python -c "import requests, bs4, PIL, ebooklib; print('OK')"
-```
-
-### Không tìm thấy chapter URLs
-
-**Triệu chứng:** "No chapters found" hoặc empty list
-
-```bash
-# Kiểm tra URL có đúng không
-curl -L "https://onepiecetruyen.net/truyen-tranh/one-piece" | grep -i "chapter"
-
-# Fallback: dùng chapters file
-python main.py --url <url> --title <title> --chapters-file chapters.txt
-```
-
-### Ảnh không tải được
-
-**Triệu chứng:** Lỗi trong errors.log, thư mục chapter rỗng
-
-```bash
-# Xem errors.log
-cat output/one-piece/errors.log
-
-# Thử tải thủ công để debug
-curl -H "Referer: https://onepiecetruyen.net" \
-     -H "User-Agent: Mozilla/5.0 ..." \
-     "<image-url>" -o test.jpg
 ```
 
 ### EPUB không mở được trên Kobo/Kindle
 
-**Triệu chứng:** File EPUB bị báo lỗi khi mở
-
 ```bash
-# Validate EPUB (cần epubcheck)
-java -jar epubcheck.jar output/one-piece/one-piece_ch001-010.epub
-
-# Xem file structure
-unzip -l output/one-piece/one-piece_ch001-010.epub
+# Unzip để kiểm tra nội dung
+python -c "
+import zipfile
+with zipfile.ZipFile('output/one-piece/one-piece_ch001-010.epub') as z:
+    imgs = [n for n in z.namelist() if 'images/' in n]
+    print(f'Images: {len(imgs)}')
+    print('First:', imgs[0])
+    print('Last:', imgs[-1])
+"
 ```
+
+### "No chapters ready to pack" sau khi xóa EPUB
+
+Tool sẽ tự detect và re-pack khi chạy lại đúng range. Xem thêm mục "Re-pack EPUB bị xóa".
