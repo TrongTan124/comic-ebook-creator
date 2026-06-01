@@ -1,0 +1,425 @@
+# ============================================================
+# claude-template.init — Template tái sử dụng cho project mới
+# ============================================================
+# Hướng dẫn sử dụng:
+#   1. Copy phần [CLAUDE.md] vào file CLAUDE.md ở root của project mới
+#   2. Điền thông tin project vào các mục có dấu {{PLACEHOLDER}}
+#   3. Tạo file README.md theo phần [README.md] — giới thiệu project cho người dùng mới
+#   4. Tạo file docs/AI_CONTEXT.md theo phần [AI_CONTEXT.md]
+#   5. Nếu dùng GSD workflow: giữ nguyên phần GSD Workflow
+#      Nếu không dùng GSD: xóa phần đó, dùng phần Mandatory Workflow thay thế
+#   6. Xóa các comment hướng dẫn (dòng bắt đầu bằng #) trước khi commit
+# ============================================================
+
+
+# ============================================================
+# [CLAUDE.md] — Dán vào CLAUDE.md của project mới
+# ============================================================
+
+# {{PROJECT_NAME}} — Claude Instructions
+
+## Communication Language
+
+**Luôn trả lời bằng tiếng Việt** khi trao đổi với người dùng trong project này.
+Giải thích kỹ thuật, hướng dẫn, phân tích lỗi — tất cả đều dùng tiếng Việt.
+
+## Project Context
+
+**Core Value:** {{MÔ TẢ GIÁ TRỊ CỐT LÕI — project giải quyết vấn đề gì, output quan trọng nhất là gì}}
+
+**Milestone:** {{VERSION}} — {{TÊN MILESTONE}} ({{SỐ}} phases, {{SỐ}} requirements)
+
+**State:** `.planning/STATE.md` — đọc file này đầu tiên để biết phase hiện tại
+
+---
+# [OPTION A] Dùng GSD Workflow (khuyến nghị cho project lớn, nhiều phase)
+## GSD Workflow
+
+This project uses the GSD (Get Shit Done) workflow. Always follow this sequence:
+
+```
+/gsd:discuss-phase N   → gather context, clarify approach
+/gsd:plan-phase N      → create PLAN.md with task breakdown
+/gsd:execute-phase N   → implement according to PLAN.md
+/gsd:verify-work N     → verify deliverables match success criteria
+```
+
+**Current phase:** Phase {{N}} — {{TÊN PHASE}} (`/gsd:plan-phase {{N}}` to start)
+
+---
+# [OPTION B] Dùng Mandatory Workflow (cho project nhỏ, không dùng GSD)
+## Mandatory Workflow — KHÔNG ĐƯỢC BỎ QUA
+
+> Áp dụng cho MỌI task: sửa bug, thêm tính năng, refactor, cập nhật config.
+
+### Bước 1 — Trước khi bắt đầu
+Đọc `docs/AI_CONTEXT.md` để nắm context và lịch sử thay đổi gần nhất.
+Nếu task liên quan đến tính năng mới → đọc thêm `.planning/ROADMAP.md`.
+
+### Bước 2 — Sau khi hoàn thành task
+**BẮT BUỘC** cập nhật `docs/AI_CONTEXT.md` mục `## Changelog` với entry mới:
+
+```markdown
+### YYYY-MM-DD — [Tên task ngắn gọn]
+**Files thay đổi:** `path/to/file1`, `path/to/file2`
+**Mô tả:** Giải thích chi tiết những gì đã thay đổi và tại sao.
+**Lưu ý deploy:** (nếu cần thiết)
+```
+
+### Bước 3 — Commit
+Sau khi đã cập nhật changelog, commit toàn bộ thay đổi:
+
+```bash
+git add -A
+git commit -m "type: mô tả ngắn gọn task"
+```
+
+> Hỏi xác nhận user trước khi `git push` nếu không được yêu cầu rõ ràng.
+
+---
+
+## Critical Rules (Do Not Violate)
+
+# Xóa các rule không áp dụng, thêm rule đặc thù của project
+1. **Never commit secrets** — `.env` files phải gitignored; chỉ commit `.env.example`
+2. **{{RULE ĐẶC THÙ 1}}** — {{GIẢI THÍCH TẠI SAO}}
+3. **{{RULE ĐẶC THÙ 2}}** — {{GIẢI THÍCH TẠI SAO}}
+4. **{{RULE ĐẶC THÙ 3}}** — {{GIẢI THÍCH TẠI SAO}}
+
+## Architecture (Existing — Do Not Change)
+
+```
+{{SƠ ĐỒ KIẾN TRÚC DẠNG ASCII — data flow từ trái sang phải}}
+{{vd: Browser → API Gateway → Backend Service → Database}}
+```
+
+ADRs in `docs/decisions/` are LOCKED decisions — do not change without explicit discussion.
+
+## Key File Locations
+
+| File | Purpose |
+|------|---------|
+| `.planning/STATE.md` | Current phase, progress, open questions |
+| `.planning/ROADMAP.md` | Phase structure with success criteria |
+| `.planning/REQUIREMENTS.md` | Requirements with traceability |
+| `docs/AI_CONTEXT.md` | AI context, design decisions, changelog |
+| `docs/decisions/` | ADRs — all architectural decisions |
+| `docs/error_ledger.md` | Bug log với triệu chứng + fix đã verify |
+| `docs/runbooks/daily-operations.md` | Hướng dẫn vận hành thủ công |
+| `docs/backlog.md` | Feature/improvement chưa implement |
+| {{PATH}} | {{PURPOSE}} |
+
+## Technology Stack
+
+- **{{LAYER 1}}** — {{CÔNG NGHỆ + PHIÊN BẢN}} ({{VAI TRÒ}})
+- **{{LAYER 2}}** — {{CÔNG NGHỆ + PHIÊN BẢN}} ({{VAI TRÒ}})
+- **{{LAYER 3}}** — {{CÔNG NGHỆ + PHIÊN BẢN}} ({{VAI TRÒ}})
+
+## Deployment Target
+
+{{OS + PHIÊN BẢN}}, {{RUNTIME ENVIRONMENT}}. Use `{{LỆNH DEPLOY}}` and `{{LỆNH VERIFY}}`.
+
+## Common Commands
+
+```bash
+# Dev
+{{LỆNH KHỞI ĐỘNG DEV}}
+
+# Test
+{{LỆNH CHẠY TEST}}
+
+# Build / Deploy
+{{LỆNH BUILD}}
+```
+
+---
+
+## Lệnh "Tổng hợp cuộc trò chuyện"
+
+Khi người dùng nói **"hãy tổng hợp lại cuộc trò chuyện này"** (hoặc tương tự: "cập nhật tài liệu", "ghi lại những gì đã làm"), thực hiện đúng quy trình sau — không hỏi lại, không bỏ sót bước nào.
+
+### Bước 1 — Đọc để hiểu trạng thái hiện tại
+
+```
+docs/error_ledger.md              → xem ERR cuối cùng đã có, tránh trùng số
+docs/runbooks/daily-operations.md → xem phần nào đã có, cần bổ sung chỗ nào
+.planning/STATE.md                → cập nhật progress nếu có phase/plan hoàn thành
+docs/backlog.md                   → ghi nhận feature/improvement phát sinh
+```
+
+### Bước 2 — Phân loại nội dung cuộc trò chuyện
+
+Từ lịch sử chat, phân loại từng sự kiện vào một trong các nhóm:
+
+| Loại | Ghi vào đâu | Tiêu chí nhận biết |
+|------|-------------|-------------------|
+| **Bug mới phát hiện** | `docs/error_ledger.md` — thêm ERR-NNN mới | Lỗi có triệu chứng + nguyên nhân + fix đã verify |
+| **Hướng dẫn vận hành / thiết lập** | `docs/runbooks/daily-operations.md` | Quy trình thao tác thủ công, cấu hình, setup... |
+| **Quyết định kiến trúc mới** | `docs/decisions/ADR-NNN-*.md` (mới) | Chọn công nghệ, thay đổi thiết kế hệ thống |
+| **Phase/plan hoàn thành** | `.planning/STATE.md` — cập nhật progress | Người dùng xác nhận tính năng hoạt động |
+| **Tính năng backlog** | `docs/backlog.md` | Ý tưởng cải tiến, feature chưa implement |
+| **Pitfall / cạm bẫy mới** | `.planning/STATE.md` mục "Critical Pitfalls" | Lỗi tiềm ẩn có thể tái phát ở phase khác |
+| **Thay đổi context / thiết kế** | `docs/AI_CONTEXT.md` mục Changelog | Quyết định thiết kế, interface, API thay đổi |
+
+### Bước 3 — Quy tắc ghi cho từng loại
+
+**error_ledger.md — Bug:**
+- Thêm dòng vào bảng tổng hợp nhanh (cuối bảng)
+- Thêm section chi tiết với format chuẩn:
+  ```
+  ### ERR-NNN — Component: Tên lỗi ngắn gọn
+  Thời gian | Component
+  Triệu chứng: (output thực tế từ terminal)
+  Phát hiện: (lệnh để detect)
+  Nguyên nhân: (root cause, không phải triệu chứng)
+  Xử lý: (lệnh fix có thể copy-paste)
+  Verify: (lệnh kiểm tra sau fix)
+  Phòng ngừa: (thay đổi code/config/quy trình)
+  ```
+- **Không ghi lỗi nếu chưa có verify thành công** — ghi chú "pending verify" thay vào đó
+
+**daily-operations.md — Hướng dẫn:**
+- Thêm section mới hoặc cập nhật section hiện có
+- Mỗi hướng dẫn phải có: đủ bước từ đầu đến cuối + lệnh verify ở cuối
+- Sửa lệnh sai (sai credential, sai tên service...) nếu phát hiện trong session
+
+**STATE.md — Progress:**
+- Đánh dấu `[x]` các todo đã hoàn thành
+- Thêm todo mới vào đúng phase
+- Cập nhật "Current Position" nếu chuyển plan/phase
+- Ghi quyết định mới vào bảng "Decisions Made"
+
+**AI_CONTEXT.md — Changelog:**
+- Thêm entry mới theo format chuẩn (xem Bước 2 Mandatory Workflow)
+- Cập nhật mục "Current Status" nếu phase/trạng thái thay đổi
+
+### Bước 4 — Sau khi cập nhật xong
+
+Báo cáo ngắn gọn:
+```
+Đã cập nhật:
+- error_ledger.md: thêm ERR-XXX (tên lỗi)
+- daily-operations.md: thêm section "...", sửa lệnh "..."
+- STATE.md: đánh dấu hoàn thành [...], thêm todo [...]
+- AI_CONTEXT.md: thêm changelog entry YYYY-MM-DD
+```
+
+Không cần giải thích lại nội dung đã ghi — người dùng có thể đọc trực tiếp.
+
+
+# ============================================================
+# [AI_CONTEXT.md] — Tạo file docs/AI_CONTEXT.md theo template này
+# ============================================================
+
+# AI Context — {{PROJECT_NAME}}
+
+> File này được AI đọc ở ĐẦU MỖI session để nắm context nhanh.
+> Cập nhật sau mỗi task hoàn thành (xem CLAUDE.md — Bước 2).
+
+## Project Summary
+
+{{MÔ TẢ ĐẦY ĐỦ HƠN: mục tiêu, người dùng, vấn đề giải quyết, scope}}
+
+## Architecture Overview
+
+```
+{{SƠ ĐỒ ASCII HOẶC MÔ TẢ KIẾN TRÚC TỔNG QUAN}}
+```
+
+## Current Status
+
+- **Phase**: {{GIAI ĐOẠN: MVP / Beta / Production / ...}}
+- **Last updated**: {{NGÀY}}
+- **Active work**: {{TÍNH NĂNG / BUG ĐANG LÀM}}
+- **Blocked on**: {{BLOCKER NẾU CÓ, hoặc "none"}}
+
+## Key Design Decisions
+
+{{CÁC QUYẾT ĐỊNH THIẾT KẾ ĐÃ CHỐT — ghi lý do, không chỉ ghi quyết định}}
+
+- **{{Quyết định 1}}**: Dùng X thay vì Y vì {{LÝ DO}}
+- **{{Quyết định 2}}**: {{...}}
+
+## Known Issues / Gotchas
+
+{{CÁC VẤN ĐỀ ĐÃ BIẾT, ĐIỂM KHÓ, WORKAROUND ĐANG DÙNG}}
+
+- **{{Vấn đề 1}}**: {{Mô tả + workaround hiện tại}}
+
+## API / Interface Map
+
+{{ÁNH XẠ UI ↔ API ENDPOINT, hoặc input/output interface chính của hệ thống}}
+
+| Endpoint / Interface | Method | Mô tả |
+|----------------------|--------|-------|
+| `{{/api/path}}` | `{{GET}}` | {{Mô tả}} |
+
+## Environment Variables
+
+| Biến | Bắt buộc | Mô tả |
+|------|----------|-------|
+| `{{VAR_NAME}}` | Yes/No | {{Mô tả, ví dụ giá trị}} |
+
+## Changelog
+
+### {{YYYY-MM-DD}} — [Project initialized]
+**Files thay đổi:** `CLAUDE.md`, `docs/AI_CONTEXT.md`
+**Mô tả:** Khởi tạo project và cấu hình AI workflow.
+**Lưu ý deploy:** N/A
+
+
+# ============================================================
+# [error_ledger.md] — Tạo file docs/error_ledger.md theo template này
+# ============================================================
+
+# Error Ledger — {{PROJECT_NAME}}
+
+> Mỗi bug được verify xong mới được ghi vào đây.
+> Format ID: ERR-NNN (tăng dần, không tái sử dụng).
+
+## Tổng hợp nhanh
+
+| ID | Component | Tóm tắt | Ngày | Status |
+|----|-----------|---------|------|--------|
+| ERR-001 | {{component}} | {{tóm tắt lỗi}} | {{ngày}} | Fixed |
+
+---
+
+## Chi tiết
+
+### ERR-001 — {{Component}}: {{Tên lỗi ngắn gọn}}
+
+**Thời gian:** {{YYYY-MM-DD}}
+**Component:** {{tên service/module}}
+
+**Triệu chứng:**
+```
+{{output thực tế từ terminal / log}}
+```
+
+**Phát hiện:**
+```bash
+{{lệnh để reproduce hoặc detect lỗi}}
+```
+
+**Nguyên nhân:**
+{{root cause — không phải triệu chứng}}
+
+**Xử lý:**
+```bash
+{{lệnh fix có thể copy-paste}}
+```
+
+**Verify sau xử lý:**
+```bash
+{{lệnh kiểm tra fix đã thành công}}
+```
+
+**Phòng ngừa:**
+{{thay đổi code/config/quy trình để tránh tái phát}}
+
+
+# ============================================================
+# [daily-operations.md] — Tạo file docs/runbooks/daily-operations.md
+# ============================================================
+
+# Daily Operations Runbook — {{PROJECT_NAME}}
+
+> Tài liệu vận hành thực tế. Cập nhật khi quy trình thay đổi.
+
+## Mục lục
+
+1. [Khởi động / Tắt dịch vụ](#1-khởi-động--tắt-dịch-vụ)
+2. [Kiểm tra sức khỏe hệ thống](#2-kiểm-tra-sức-khỏe-hệ-thống)
+3. [Xử lý sự cố thường gặp](#3-xử-lý-sự-cố-thường-gặp)
+
+---
+
+## 1. Khởi động / Tắt dịch vụ
+
+```bash
+# Khởi động
+{{lệnh start}}
+
+# Tắt
+{{lệnh stop}}
+
+# Verify
+{{lệnh kiểm tra service đang chạy}}
+```
+
+## 2. Kiểm tra sức khỏe hệ thống
+
+```bash
+{{lệnh health check}}
+```
+
+## 3. Xử lý sự cố thường gặp
+
+### {{Tình huống 1}}
+
+**Triệu chứng:** {{...}}
+
+```bash
+# Fix
+{{lệnh}}
+
+# Verify
+{{lệnh}}
+```
+
+
+# ============================================================
+# [README.md] — Tạo file README.md ở root của project
+# ============================================================
+
+# {{PROJECT_NAME}}
+
+{{MÔ TẢ NGẮN GỌN 1-2 CÂU: project làm gì, dành cho ai}}
+
+## Tính năng
+
+- {{TÍNH NĂNG 1}}
+- {{TÍNH NĂNG 2}}
+- {{TÍNH NĂNG 3}}
+
+## Yêu cầu
+
+- {{RUNTIME + PHIÊN BẢN}} (vd: Python 3.10+, Node.js 18+)
+- {{DEPENDENCY KHÁC NẾU CÓ}}
+
+## Cài đặt
+
+```bash
+{{LỆNH CLONE VÀ SETUP}}
+{{LỆNH CÀI DEPENDENCY}}
+```
+
+## Cách sử dụng
+
+### {{USECASE CƠ BẢN}}
+
+```bash
+{{LỆNH VÍ DỤ CỤ THỂ}}
+```
+
+### Tất cả tham số
+
+| Tham số | Mặc định | Mô tả |
+|---------|---------|-------|
+| `{{--flag}}` | `{{default}}` | {{Mô tả}} |
+
+## Output
+
+```
+{{SƠ ĐỒ CẤU TRÚC THƯ MỤC OUTPUT}}
+```
+
+## {{PHẦN ĐẶC THÙ CỦA PROJECT}}
+
+{{NỘI DUNG — vd: danh sách site hỗ trợ, API endpoints, config options...}}
+
+## Ghi chú kỹ thuật
+
+- {{GHI CHÚ QUAN TRỌNG 1 — giới hạn, behavior đặc biệt}}
+- {{GHI CHÚ QUAN TRỌNG 2}}
