@@ -79,6 +79,18 @@ Orchestrator (điều phối workflow)
 
 ## Changelog
 
+### 2026-06-01 — Device-optimized EPUB packing (Kindle PW5 + Kobo Libra 2)
+**Files thay đổi:** `src/packager.py`, `main.py`
+**Mô tả:** Fix hoàn toàn vấn đề hiển thị ảnh trên máy đọc sách.
+- **Image resize + letterbox**: Mỗi ảnh được resize về đúng kích thước màn hình thiết bị (Kindle 1072×1448, Kobo 1264×1680) với black letterbox hai bên — đảm bảo 1 page = 1 màn hình, không cần scroll.
+- **Fixed-layout EPUB**: Thêm `rendition:pre-paginated`, `rendition:spread=none`, `rendition:orientation=portrait` — reader hiển thị đúng 1 trang/màn hình.
+- **Cover image**: Trang đầu chapter 1 được set làm cover trong metadata EPUB → hiện đúng thumbnail trên Kobo/Kindle khi tắt màn hình.
+- **Viewport + CSS chính xác**: Mỗi HTML page có `<meta name="viewport" content="width=DW, height=DH"/>` và CSS `width/height` pixel-exact theo device.
+- **`--target-device` CLI arg**: `kindle`, `kobo`, hoặc `both` (default). Khi `both`, tạo 2 EPUB/batch với suffix `_kindle.epub` và `_kobo.epub`.
+- **`_parse_epub_range()` helper**: Refactor phân tích EPUB filename — xử lý cả tên cũ (không suffix) và tên mới (có `_kindle`/`_kobo`).
+- **`_invalidate_epub_for_chapter` fix**: Xóa tất cả device variants khi chapter bị re-download (không `break` sau EPUB đầu tiên).
+**Lưu ý deploy:** Các EPUB cũ (không suffix) vẫn được nhận dạng đúng. Để repack lại batch cũ theo format mới: xóa EPUB cũ + chạy lại tool.
+
 ### 2026-06-01 — [Project initialized]
 **Files thay đổi:** `CLAUDE.md`, `docs/AI_CONTEXT.md`, `.planning/STATE.md`, `.planning/ROADMAP.md`, `docs/error_ledger.md`, `docs/runbooks/daily-operations.md`
 **Mô tả:** Khởi tạo project structure từ claude-template.init. Thiết lập architecture với site adapter pattern, viết skeleton code cho tất cả các modules.

@@ -72,30 +72,42 @@ def _count_folder_images(folder) -> int:
     return sum(1 for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.stat().st_size > 0)
 
 
+def _parse_epub_range(stem: str) -> tuple[str, str] | None:
+    """
+    Parse (start_key, end_key) from an EPUB stem.
+    Handles both plain ('title_ch001-010') and device-suffixed ('title_ch001-010_kindle').
+    """
+    if "_ch" not in stem:
+        return None
+    range_part = stem.split("_ch")[-1]   # "001-010" or "001-010_kindle"
+    range_part = range_part.split("_")[0]  # strip optional device suffix → "001-010"
+    parts = range_part.split("-")
+    if len(parts) != 2:
+        return None
+    return parts[0], parts[1]
+
+
 def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, title: str, log) -> None:
     """
-    When a previously-packed chapter is re-downloaded, find the EPUB that
-    contains it, delete it, and reset all chapters in that batch to 'downloaded'
-    so the pack phase regenerates a correct EPUB.
+    When a previously-packed chapter is re-downloaded, find all EPUBs that
+    contain it (including device-suffixed variants), delete them, and reset all
+    chapters in that batch to 'downloaded' so the pack phase regenerates correct EPUBs.
     """
     for epub_path in output_dir.glob(f"{title}_ch*.epub"):
-        stem = epub_path.stem  # e.g. "one-piece_ch001-010"
-        range_part = stem.split("_ch")[-1]  # "001-010"
-        parts = range_part.split("-")
-        if len(parts) != 2:
+        parsed = _parse_epub_range(epub_path.stem)
+        if parsed is None:
             continue
-        start_key, end_key = parts[0], parts[1]
+        start_key, end_key = parsed
         if start_key <= chapter_key <= end_key:
             log.info(f"Deleting stale EPUB: {epub_path.name} (chapter {chapter_key} was updated)")
             epub_path.unlink()
-            # Reset all packed chapters in this batch so they get re-packed together
             packed_in_batch = [
                 k for k in manifest.get_packed_chapters()
                 if start_key <= k <= end_key
             ]
             if packed_in_batch:
                 manifest.reset_to_downloaded(packed_in_batch)
-            break
+            # Keep scanning — there may be multiple device variants of the same batch
 
 
 def _reset_missing_epubs(
@@ -113,13 +125,13 @@ def _reset_missing_epubs(
     if not packed_in_range:
         return
 
-    # Build coverage from actual EPUB files on disk
+    # Build coverage from actual EPUB files on disk (any device variant counts)
     covered: set[str] = set()
-    for epub in output_dir.glob(f"{title}_ch*.epub"):
-        parts = epub.stem.split("_ch")[-1].split("-")
-        if len(parts) != 2:
+    for epub_file in output_dir.glob(f"{title}_ch*.epub"):
+        parsed = _parse_epub_range(epub_file.stem)
+        if parsed is None:
             continue
-        start_key, end_key = parts[0], parts[1]
+        start_key, end_key = parsed
         for key in packed_in_range:
             if start_key <= key <= end_key:
                 covered.add(key)
@@ -138,10 +150,13 @@ def run(args: argparse.Namespace) -> None:
     log = logging.getLogger(__name__)
     error_log = output_dir / "errors.log"
 
+    from src.packager import DEVICE_PROFILES
+    devices = list(DEVICE_PROFILES.keys()) if args.target_device == "both" else [args.target_device]
+
     adapter = pick_adapter(args.url)
     manifest = Manifest(output_dir, args.title)
     downloader = Downloader(output_dir, delay=args.delay, error_log=error_log)
-    packager = Packager(output_dir, args.title)
+    packager = Packager(output_dir, args.title, devices=devices)
 
     # --- Gather chapter URLs ---
     if args.chapters_file:
@@ -239,9 +254,10 @@ def run(args: argparse.Namespace) -> None:
             continue
 
         log.info(f"Packing chapters {batch_keys[0]}-{batch_keys[-1]} -> EPUB")
-        epub_path = packager.pack(batch_keys, [f for f in folders if f])
+        epub_paths = packager.pack(batch_keys, [f for f in folders if f])
         manifest.set_packed(batch_keys)
-        log.info(f"Created: {epub_path}")
+        for ep in epub_paths:
+            log.info(f"Created: {ep}")
 
     log.info("Done.")
 
@@ -259,6 +275,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--end-chapter", type=int, default=None, help="Last chapter to process (inclusive)")
     parser.add_argument("--output-dir", default="./output", help="Output directory (default: ./output)")
     parser.add_argument("--delay", type=float, default=1.5, help="Delay between requests in seconds (default: 1.5)")
+    parser.add_argument(
+        "--target-device",
+        choices=["kindle", "kobo", "both"],
+        default="both",
+        help="Target e-reader device for image sizing (default: both — creates one EPUB per device)",
+    )
     return parser.parse_args()
 
 

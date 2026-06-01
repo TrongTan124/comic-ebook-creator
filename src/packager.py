@@ -1,5 +1,6 @@
 import logging
 import uuid
+from io import BytesIO
 from pathlib import Path
 
 from ebooklib import epub
@@ -7,31 +8,69 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
+# Screen dimensions (portrait) for supported e-reader devices
+DEVICE_PROFILES: dict[str, dict[str, int]] = {
+    "kindle": {"width": 1072, "height": 1448},  # Kindle Paperwhite 5
+    "kobo":   {"width": 1264, "height": 1680},  # Kobo Libra 2
+}
+
 
 class Packager:
     """Packages downloaded chapter folders into EPUB files."""
 
-    def __init__(self, output_dir: Path, title: str) -> None:
+    def __init__(self, output_dir: Path, title: str, devices: list[str] | None = None) -> None:
         self._output_dir = output_dir
         self._title = title
+        # Default: all supported devices
+        self._devices = devices if devices is not None else list(DEVICE_PROFILES.keys())
+        for d in self._devices:
+            if d not in DEVICE_PROFILES:
+                raise ValueError(f"Unknown device '{d}'. Supported: {list(DEVICE_PROFILES)}")
 
-    def pack(self, chapter_keys: list[str], chapter_folders: list[Path]) -> Path:
+    def pack(self, chapter_keys: list[str], chapter_folders: list[Path]) -> list[Path]:
         """
-        Create one EPUB from the given chapters.
-        chapter_keys: e.g. ["001", "002", ..., "010"]
-        chapter_folders: matching list of chapter dirs containing images
-        Returns path to the created EPUB file.
+        Create one EPUB per target device from the given chapters.
+        Returns list of paths to created EPUB files (one per device).
         """
+        created: list[Path] = []
+        # Use device suffix in filename only when producing multiple devices
+        multi = len(self._devices) > 1
+        for device in self._devices:
+            profile = DEVICE_PROFILES[device]
+            name_suffix = f"_{device}" if multi else ""
+            epub_path = self._pack_for_device(chapter_keys, chapter_folders, profile, name_suffix)
+            created.append(epub_path)
+        return created
+
+    # ------------------------------------------------------------------
+    # Per-device EPUB builder
+    # ------------------------------------------------------------------
+
+    def _pack_for_device(
+        self,
+        chapter_keys: list[str],
+        chapter_folders: list[Path],
+        profile: dict[str, int],
+        name_suffix: str,
+    ) -> Path:
         start = chapter_keys[0]
         end = chapter_keys[-1]
-        epub_name = f"{self._title}_ch{start}-{end}.epub"
+        epub_name = f"{self._title}_ch{start}-{end}{name_suffix}.epub"
         epub_path = self._output_dir / epub_name
+
+        dw, dh = profile["width"], profile["height"]
 
         book = epub.EpubBook()
         book.set_identifier(str(uuid.uuid4()))
         book.set_title(f"{self._title} Ch.{start}-{end}")
         book.set_language("vi")
 
+        # Fixed-layout metadata: one screen = one page, no scrolling
+        book.add_metadata("OPF", "meta", "pre-paginated", {"property": "rendition:layout"})
+        book.add_metadata("OPF", "meta", "none",          {"property": "rendition:spread"})
+        book.add_metadata("OPF", "meta", "portrait",      {"property": "rendition:orientation"})
+
+        cover_set = False
         spine: list = ["nav"]
         toc: list = []
 
@@ -41,11 +80,17 @@ class Packager:
                 logger.warning(f"No images found in {ch_folder}, skipping chapter {ch_key}")
                 continue
 
-            chapter_html_items = []
+            chapter_html_items: list[epub.EpubHtml] = []
             for page_idx, img_path in enumerate(chapter_pages, start=1):
-                img_item, html_item = self._add_page(book, ch_key, page_idx, img_path)
+                img_item, html_item = self._add_page(book, ch_key, page_idx, img_path, dw, dh)
                 chapter_html_items.append(html_item)
                 spine.append(html_item)
+
+                # First page of first chapter becomes the library cover thumbnail
+                if not cover_set:
+                    cover_data = self._resize_for_device(img_path.read_bytes(), dw, dh)
+                    book.set_cover("cover.jpg", cover_data, create_page=False)
+                    cover_set = True
 
             if chapter_html_items:
                 toc.append(
@@ -70,11 +115,10 @@ class Packager:
     # ------------------------------------------------------------------
 
     def _collect_pages(self, folder: Path) -> list[Path]:
-        images = sorted(
+        return sorted(
             p for p in folder.iterdir()
             if p.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")
         )
-        return images
 
     def _add_page(
         self,
@@ -82,37 +126,29 @@ class Packager:
         ch_key: str,
         page_idx: int,
         img_path: Path,
+        device_width: int,
+        device_height: int,
     ) -> tuple[epub.EpubImage, epub.EpubHtml]:
-        # Determine media type
-        suffix = img_path.suffix.lower()
-        media_type = {
-            ".jpg": "image/jpeg",
-            ".jpeg": "image/jpeg",
-            ".png": "image/png",
-            ".webp": "image/webp",
-        }.get(suffix, "image/jpeg")
-
-        img_name = f"images/ch{ch_key}_{page_idx:03d}{suffix}"
-
-        # Convert webp to jpeg for maximum compatibility
-        img_data = self._read_image(img_path, convert_to_jpeg=(suffix == ".webp"))
-        if suffix == ".webp":
-            img_name = img_name.replace(".webp", ".jpg")
-            media_type = "image/jpeg"
+        img_name = f"images/ch{ch_key}_{page_idx:03d}.jpg"
+        img_data = self._resize_for_device(img_path.read_bytes(), device_width, device_height)
 
         img_item = epub.EpubImage()
         img_item.file_name = img_name
-        img_item.media_type = media_type
+        img_item.media_type = "image/jpeg"
         img_item.content = img_data
         book.add_item(img_item)
 
-        # HTML wrapper — manga pages are usually full-width.
-        # No XML declaration: lxml's HTML parser rejects it when ebooklib calls get_body_content().
+        # Fixed-layout page: dimensions match device exactly so there is no scrolling.
+        # The image is already pixel-perfect after resize (black letterbox added in Python).
         html_content = (
-            f'<html xmlns="http://www.w3.org/1999/xhtml">'
+            f'<html xmlns="http://www.w3.org/1999/xhtml"'
+            f' xmlns:epub="http://www.idpf.org/2007/ops">'
             f'<head><title>Chapter {ch_key} Page {page_idx}</title>'
-            f'<style>body{{margin:0;padding:0;text-align:center;background:#000}}'
-            f'img{{max-width:100%;height:auto}}</style></head>'
+            f'<meta name="viewport" content="width={device_width}, height={device_height}"/>'
+            f'<style>'
+            f'html,body{{margin:0;padding:0;width:{device_width}px;height:{device_height}px;overflow:hidden;background:#000}}'
+            f'img{{width:{device_width}px;height:{device_height}px;display:block}}'
+            f'</style></head>'
             f'<body><img src="../{img_name}" alt="Ch{ch_key} P{page_idx}"/></body>'
             f'</html>'
         )
@@ -127,11 +163,24 @@ class Packager:
         return img_item, html_item
 
     @staticmethod
-    def _read_image(path: Path, convert_to_jpeg: bool = False) -> bytes:
-        if convert_to_jpeg:
-            from io import BytesIO
-            buf = BytesIO()
-            with Image.open(path) as img:
-                img.convert("RGB").save(buf, format="JPEG", quality=90)
-            return buf.getvalue()
-        return path.read_bytes()
+    def _resize_for_device(img_data: bytes, device_width: int, device_height: int) -> bytes:
+        """
+        Scale image to fit within device dimensions (maintaining aspect ratio),
+        then center on a black canvas of exactly device_width x device_height.
+        Always returns JPEG bytes.
+        """
+        with Image.open(BytesIO(img_data)) as img:
+            img = img.convert("RGB")
+            scale = min(device_width / img.width, device_height / img.height)
+            new_w = int(img.width * scale)
+            new_h = int(img.height * scale)
+            resized = img.resize((new_w, new_h), Image.LANCZOS)
+
+        canvas = Image.new("RGB", (device_width, device_height), (0, 0, 0))
+        x = (device_width - new_w) // 2
+        y = (device_height - new_h) // 2
+        canvas.paste(resized, (x, y))
+
+        buf = BytesIO()
+        canvas.save(buf, format="JPEG", quality=90)
+        return buf.getvalue()
