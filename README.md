@@ -119,13 +119,15 @@ python main.py \
 
 
 # BONUS
-Toi su dung skill promt-master de tao lenh cho claude. Cu the, toi viet:
+Tôi sử dụng skill prompt-master để tạo lệnh chuẩn gửi claude làm ứng dụng này. Cụ thể tôi viết:
 
+```sh
 /prompt-master Tôi muốn viết một hệ thống có thể truy cập vào các trang đọc truyện online, sau đó tải các ảnh về theo từng chapter. Sau đó tôi dùng các ảnh này để làm thành file ebook đọc trên kobo hoặc kindle. 
 Trang đọc truyện và truyện tôi sẽ chỉ định. Các chapter nếu có thể lấy tự động được theo truyện thì tốt. Còn nếu không thể tự động thì tôi có thể đưa danh sách link từng chapter (cái này không khuyến khích)
 Ứng dụng này có thể tự tải ảnh, tự tạo thành một file book sau khi gom gộp khoảng 10 chapter lại với nhau.
+```
 
-Ket qua tra ve nhu duoi. Sau do toi dung promt nay de dua cho claude. Toi cung improve them trong qua trinh lam, nhung co ban promt nay tuong doi chuan:
+Kêt quả trả về y hệt như dưới (đúng cấu trúc markdown). Tôi sử dụng prompt này để gửi cho claude viết ứng dụng. Sau đó tôi có cải tiến thêm một số yêu cầu (điều chỉnh) để phù hợp với nhu cầu của tôi. Cơ bản prompt này chuẩn để yêu cầu claude viết rồi:
 
 ## Objective
 Build a CLI tool in Python that crawls manga/comic chapter images from a specified online reading site, downloads them locally, and packages every 10 chapters into a single EPUB or CBZ ebook file readable on Kobo and Kindle.
