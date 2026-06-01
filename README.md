@@ -116,3 +116,75 @@ python main.py \
 - Rate limiting: delay 1–2 giây ngẫu nhiên giữa mỗi request để tránh bị block
 - Retry: tối đa 3 lần với backoff 2s, 4s, 8s khi gặp timeout
 - Manifest `chapters.json` lưu `total_pages` (từ CDN probe) để detect ảnh bị miss chính xác
+
+
+# BONUS
+Toi su dung skill promt-master de tao lenh cho claude. Cu the, toi viet:
+
+/prompt-master Tôi muốn viết một hệ thống có thể truy cập vào các trang đọc truyện online, sau đó tải các ảnh về theo từng chapter. Sau đó tôi dùng các ảnh này để làm thành file ebook đọc trên kobo hoặc kindle. 
+Trang đọc truyện và truyện tôi sẽ chỉ định. Các chapter nếu có thể lấy tự động được theo truyện thì tốt. Còn nếu không thể tự động thì tôi có thể đưa danh sách link từng chapter (cái này không khuyến khích)
+Ứng dụng này có thể tự tải ảnh, tự tạo thành một file book sau khi gom gộp khoảng 10 chapter lại với nhau.
+
+Ket qua tra ve nhu duoi. Sau do toi dung promt nay de dua cho claude. Toi cung improve them trong qua trinh lam, nhung co ban promt nay tuong doi chuan:
+
+## Objective
+Build a CLI tool in Python that crawls manga/comic chapter images from a specified online reading site, downloads them locally, and packages every 10 chapters into a single EPUB or CBZ ebook file readable on Kobo and Kindle.
+
+## Context
+- No existing codebase. Build from scratch.
+- Target: manga/webtoon reading sites (URL and manga title will be provided at runtime)
+- Chapters should be auto-detected from the manga's table of contents page when possible
+- Fallback: accept a plain-text file of chapter URLs (one per line) — deprioritize UX for this path
+- Output ebooks must be compatible with Kobo and Kindle (EPUB preferred; CBZ as fallback)
+- Tool runs locally on Linux/macOS via CLI. No GUI needed.
+
+## Target State
+A working CLI tool with this interface:
+
+```bash
+python main.py --url "https://site.com/manga/ten-truyen" --title "Tên Truyện" [--chapters-file chapters.txt]
+```
+
+When done:
+- Auto-discovers all chapter URLs from the manga index page
+- Downloads images per chapter into `output/<manga-title>/ch-<NNN>/`
+- Every 10 chapters → generates one EPUB file: `output/<manga-title>/<manga-title>_ch001-010.epub`
+- Images are embedded in the EPUB with correct reading order
+- Existing downloaded chapters are skipped (resume support)
+- A `chapters.json` manifest is written to track state
+
+## Scope
+- Work only in: `./src/`, `./output/`, `main.py`, `requirements.txt`
+- Do NOT touch: system Python packages, system directories, any file outside the project folder
+
+## Constraints
+- Python 3.10+
+- Dependencies: `requests`, `beautifulsoup4`, `Pillow`, `ebooklib` — no others without asking
+- Use `requests` + `BeautifulSoup` for scraping. Do NOT use Selenium or Playwright unless the site requires JS rendering — ask before adding browser automation
+- Respect rate limiting: add a 1–2 second delay between image requests
+- User-agent spoof: use a realistic browser User-Agent header
+- Chapter auto-detection MUST be configurable via a site adapter pattern — different sites have different HTML structures. Start with one adapter (e.g. NetTruyen or site the user specifies), make it easy to add more
+- Image validation: skip and log corrupt/zero-byte images instead of crashing
+- EPUB chapter grouping: 10 chapters per file, configurable via `--batch-size N`
+
+## Acceptance Criteria
+- [ ] `python main.py --url <url> --title <name>` runs end-to-end without error on the target site
+- [ ] Images download to correct folder structure: `output/<title>/ch-<NNN>/<page>.jpg`
+- [ ] Every 10 chapters produces one valid EPUB file openable in Kobo/Kindle desktop app
+- [ ] Re-running skips already-downloaded chapters
+- [ ] `--chapters-file` fallback path works when auto-detection fails
+- [ ] Errors (network, parse, corrupt image) are logged to `output/<title>/errors.log`, not crash
+
+## Stop Conditions
+Stop and ask before:
+- Adding any dependency not in the Constraints list
+- Implementing Selenium or any browser automation
+- Changing the output folder structure or EPUB naming convention
+- Writing any file outside `./src/`, `./output/`, `main.py`, `requirements.txt`
+- Choosing a site adapter implementation that hard-codes site logic into core modules
+
+## Progress
+After each completed step: ✅ [what was done] — [file(s) affected]
+
+## Session Strategy
+New session — build from scratch. Think carefully before starting architecture.
