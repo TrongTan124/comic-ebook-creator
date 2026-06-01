@@ -95,6 +95,8 @@
 | `total_pages` tách riêng `downloaded_pages` | `image_count` cũ = số ảnh download được, không phải tổng CDN | 2026-06-01 |
 | Pack phase filter by `range_keys` | Tránh chapters từ 2 range khác nhau bị gộp chung khi có gap | 2026-06-01 |
 | `_reset_missing_epubs` scan file thực tế | batch_size-independent, không bị lệch khi user thay đổi --batch-size | 2026-06-01 |
+| Device-optimized EPUB (resize + fixed-layout) | Ảnh 756x1200 hẹp hơn màn hình → bị tràn khi dùng max-width:100% → cần resize về đúng device resolution + pre-paginated | 2026-06-01 |
+| `--target-device both` tạo 2 EPUB/batch | User dùng đồng thời Kindle PW5 + Kobo Libra 2 — 2 kích thước màn hình khác nhau | 2026-06-01 |
 
 ## Critical Pitfalls
 
@@ -106,3 +108,5 @@
 - **Pack phase chỉ xử lý range hiện tại**: Chạy range nhỏ (vd ch41-50) sẽ KHÔNG pack chapters ngoài range dù chúng đang "downloaded"
 - **Chapter number parsing**: Một số chapter có số thập phân (100.5) — cần handle khi format tên file
 - **EPUB image paths**: ebooklib yêu cầu image items phải được add vào spine đúng thứ tự
+- **EPUB không dùng fixed-layout sẽ bị scroll**: Ảnh manga (~0.63 ratio) hẹp hơn màn hình e-reader (~0.74-0.75 ratio) → fill 100% width khiến height vượt màn hình → phải resize + `rendition:pre-paginated`
+- **EPUBs cũ (không có device suffix) vẫn được nhận dạng**: `_parse_epub_range()` xử lý cả 2 format. Muốn repack format mới: xóa EPUB cũ + chạy lại tool

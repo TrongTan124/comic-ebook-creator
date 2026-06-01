@@ -41,7 +41,13 @@ python main.py \
 
 # Verify
 ls output/one-piece/*.epub
-# Expected: one-piece_ch001-010.epub
+# Expected (default --target-device both):
+#   one-piece_ch001-010_kindle.epub   (1072x1448, ~73 MB)
+#   one-piece_ch001-010_kobo.epub     (1264x1680, ~90 MB)
+
+# Chỉ tạo cho 1 device:
+python main.py --url "..." --title "one-piece" --target-device kindle ...
+python main.py --url "..." --title "one-piece" --target-device kobo  ...
 ```
 
 ### QUAN TRỌNG: Luôn chỉ định range rõ ràng
@@ -71,6 +77,16 @@ python main.py --url "..." --title "one-piece" --start-chapter 1 --end-chapter 1
 del output\one-piece\one-piece_ch001-010.epub
 
 # Chạy lại — tool detect EPUB missing, re-pack từ ảnh đã có
+python main.py --url "..." --title "one-piece" --start-chapter 1 --end-chapter 10
+```
+
+### Repack batch cũ (format cũ không có device suffix) sang format mới
+
+```bash
+# Xóa EPUB cũ (không có _kindle/_kobo suffix)
+del output\one-piece\one-piece_ch001-010.epub
+
+# Chạy lại — tự detect missing, tạo _kindle.epub + _kobo.epub
 python main.py --url "..." --title "one-piece" --start-chapter 1 --end-chapter 10
 ```
 
@@ -185,11 +201,28 @@ python -c "import requests, bs4, PIL, ebooklib; print('OK')"
 # Unzip để kiểm tra nội dung
 python -c "
 import zipfile
-with zipfile.ZipFile('output/one-piece/one-piece_ch001-010.epub') as z:
+with zipfile.ZipFile('output/one-piece/one-piece_ch001-010_kindle.epub') as z:
     imgs = [n for n in z.namelist() if 'images/' in n]
     print(f'Images: {len(imgs)}')
     print('First:', imgs[0])
     print('Last:', imgs[-1])
+"
+```
+
+### Kiểm tra kích thước ảnh trong EPUB đúng device chưa
+
+```bash
+python -c "
+import zipfile
+from PIL import Image
+from io import BytesIO
+
+epub_path = 'output/one-piece/one-piece_ch001-010_kindle.epub'
+with zipfile.ZipFile(epub_path) as z:
+    imgs = [n for n in z.namelist() if 'images/' in n]
+    data = z.read(imgs[0])
+    with Image.open(BytesIO(data)) as img:
+        print(f'Size: {img.size}')  # Expected: (1072, 1448) for kindle
 "
 ```
 
