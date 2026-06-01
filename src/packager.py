@@ -18,9 +18,18 @@ DEVICE_PROFILES: dict[str, dict[str, int]] = {
 class Packager:
     """Packages downloaded chapter folders into EPUB files."""
 
-    def __init__(self, output_dir: Path, title: str, devices: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        output_dir: Path,
+        title: str,
+        devices: list[str] | None = None,
+        fit_mode: str = "letterbox",
+    ) -> None:
         self._output_dir = output_dir
         self._title = title
+        self._fit_mode = fit_mode
+        if fit_mode not in ("letterbox", "fill", "stretch"):
+            raise ValueError(f"Unknown fit_mode '{fit_mode}'. Supported: letterbox, fill, stretch")
         # Default: all supported devices
         self._devices = devices if devices is not None else list(DEVICE_PROFILES.keys())
         for d in self._devices:
@@ -82,13 +91,13 @@ class Packager:
 
             chapter_html_items: list[epub.EpubHtml] = []
             for page_idx, img_path in enumerate(chapter_pages, start=1):
-                img_item, html_item = self._add_page(book, ch_key, page_idx, img_path, dw, dh)
+                img_item, html_item = self._add_page(book, ch_key, page_idx, img_path, dw, dh, self._fit_mode)
                 chapter_html_items.append(html_item)
                 spine.append(html_item)
 
                 # First page of first chapter becomes the library cover thumbnail
                 if not cover_set:
-                    cover_data = self._resize_for_device(img_path.read_bytes(), dw, dh)
+                    cover_data = self._resize_for_device(img_path.read_bytes(), dw, dh, self._fit_mode)
                     book.set_cover("cover.jpg", cover_data, create_page=False)
                     cover_set = True
 
@@ -128,9 +137,10 @@ class Packager:
         img_path: Path,
         device_width: int,
         device_height: int,
+        fit_mode: str = "letterbox",
     ) -> tuple[epub.EpubImage, epub.EpubHtml]:
         img_name = f"images/ch{ch_key}_{page_idx:03d}.jpg"
-        img_data = self._resize_for_device(img_path.read_bytes(), device_width, device_height)
+        img_data = self._resize_for_device(img_path.read_bytes(), device_width, device_height, fit_mode)
 
         img_item = epub.EpubImage()
         img_item.file_name = img_name
@@ -146,8 +156,9 @@ class Packager:
             f'<head><title>Chapter {ch_key} Page {page_idx}</title>'
             f'<meta name="viewport" content="width={device_width}, height={device_height}"/>'
             f'<style>'
+            f'@page{{margin:0;padding:0}}'
             f'html,body{{margin:0;padding:0;width:{device_width}px;height:{device_height}px;overflow:hidden;background:#000}}'
-            f'img{{width:{device_width}px;height:{device_height}px;display:block}}'
+            f'img{{width:{device_width}px;height:{device_height}px;display:block;margin:0;padding:0}}'
             f'</style></head>'
             f'<body><img src="../{img_name}" alt="Ch{ch_key} P{page_idx}"/></body>'
             f'</html>'
@@ -163,24 +174,62 @@ class Packager:
         return img_item, html_item
 
     @staticmethod
-    def _resize_for_device(img_data: bytes, device_width: int, device_height: int) -> bytes:
+    def _resize_for_device(
+        img_data: bytes,
+        device_width: int,
+        device_height: int,
+        fit_mode: str = "letterbox",
+    ) -> bytes:
         """
-        Scale image to fit within device dimensions (maintaining aspect ratio),
-        then center on a black canvas of exactly device_width x device_height.
-        Always returns JPEG bytes.
+        Resize image for device screen.
+
+        letterbox: scale to fit entirely within screen — preserves all content,
+                   adds black bars on sides or top/bottom as needed.
+        fill:      scale to fill full screen width — no side bars; crops top/bottom
+                   symmetrically if image is taller than screen after scaling.
+        stretch:   scale to fit full screen height, then stretch width to fill screen
+                   — no black bars, no content loss; slight horizontal distortion.
+                   Best for portrait manga pages narrower than the device screen.
+        Always returns JPEG bytes at device_width x device_height.
         """
         with Image.open(BytesIO(img_data)) as img:
             img = img.convert("RGB")
-            scale = min(device_width / img.width, device_height / img.height)
-            new_w = int(img.width * scale)
-            new_h = int(img.height * scale)
-            resized = img.resize((new_w, new_h), Image.LANCZOS)
 
-        canvas = Image.new("RGB", (device_width, device_height), (0, 0, 0))
-        x = (device_width - new_w) // 2
-        y = (device_height - new_h) // 2
-        canvas.paste(resized, (x, y))
+            if fit_mode == "stretch":
+                # Step 1: scale to fit height exactly
+                new_h = device_height
+                new_w = round(img.width * (device_height / img.height))
+                height_fitted = img.resize((new_w, new_h), Image.LANCZOS)
+                # Step 2: stretch (or crop) width to fill device width
+                if new_w <= device_width:
+                    # Portrait page narrower than device — stretch x to fill, no content loss
+                    result = height_fitted.resize((device_width, device_height), Image.LANCZOS)
+                else:
+                    # Landscape page wider than device — crop sides symmetrically
+                    x_start = (new_w - device_width) // 2
+                    result = height_fitted.crop((x_start, 0, x_start + device_width, device_height))
+            elif fit_mode == "fill":
+                # Force exact device width — no floating-point rounding error
+                new_w = device_width
+                new_h = round(img.height * (device_width / img.width))
+                resized = img.resize((new_w, new_h), Image.LANCZOS)
+                if new_h > device_height:
+                    # Crop symmetrically — keep center of the page
+                    y_start = (new_h - device_height) // 2
+                    result = resized.crop((0, y_start, device_width, y_start + device_height))
+                else:
+                    canvas = Image.new("RGB", (device_width, device_height), (0, 0, 0))
+                    canvas.paste(resized, ((device_width - new_w) // 2, (device_height - new_h) // 2))
+                    result = canvas
+            else:  # letterbox
+                scale = min(device_width / img.width, device_height / img.height)
+                new_w = round(img.width * scale)
+                new_h = round(img.height * scale)
+                resized = img.resize((new_w, new_h), Image.LANCZOS)
+                canvas = Image.new("RGB", (device_width, device_height), (0, 0, 0))
+                canvas.paste(resized, ((device_width - new_w) // 2, (device_height - new_h) // 2))
+                result = canvas
 
         buf = BytesIO()
-        canvas.save(buf, format="JPEG", quality=90)
+        result.save(buf, format="JPEG", quality=90)
         return buf.getvalue()

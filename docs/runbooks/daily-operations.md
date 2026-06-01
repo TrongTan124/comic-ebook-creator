@@ -90,6 +90,57 @@ del output\one-piece\one-piece_ch001-010.epub
 python main.py --url "..." --title "one-piece" --start-chapter 1 --end-chapter 10
 ```
 
+### Repack xóa vệt đen 2 bên — khuyến nghị dùng `stretch`
+
+Trang manga portrait (~tỉ lệ 0.67) hẹp hơn màn hình Kobo (~0.75) → letterbox để 2 vệt đen hai bên.
+
+**So sánh 3 fit-mode:**
+
+| Mode | Vệt đen | Mất nội dung | Distortion | Khuyến nghị |
+|------|---------|-------------|-----------|-------------|
+| `letterbox` | Có (2 bên) | Không | Không | Khi cần giữ tỉ lệ tuyệt đối |
+| `fill` | Không | Có (crop top/bottom) | Không | KHÔNG dùng cho manga |
+| `stretch` | Không | Không | Nhẹ (~12% ngang) | **Dùng cho Kobo** |
+
+**QUAN TRỌNG:** Cả 3 mode đều KHÔNG phải default — phải ghi tường minh mỗi lần chạy. Default là `letterbox`.
+
+```bash
+# Repack với stretch mode — xóa vệt đen, giữ toàn bộ nội dung
+python main.py \
+  --url "https://onepiecetruyen.net/chapters" \
+  --title "one-piece" \
+  --target-device kobo \
+  --fit-mode stretch \
+  --force-repack \
+  --start-chapter 1 \
+  --end-chapter 10
+```
+
+`--force-repack` tự động:
+1. Xóa tất cả EPUB của title này trên disk
+2. Reset chapters về trạng thái "downloaded"
+3. Pack lại với settings mới
+
+Kiểm tra ảnh trong EPUB đúng kích thước và không có black bar:
+```bash
+python -c "
+import zipfile
+from PIL import Image
+from io import BytesIO
+
+epub_path = 'output/one-piece/one-piece_ch001-010_kobo.epub'
+with zipfile.ZipFile(epub_path) as z:
+    imgs = [n for n in z.namelist() if 'images/' in n]
+    data = z.read(imgs[0])
+    with Image.open(BytesIO(data)) as img:
+        print(f'Size: {img.size}')  # Expected: (1264, 1680)
+        px_left  = img.getpixel((0, img.height // 2))
+        px_right = img.getpixel((img.width - 1, img.height // 2))
+        print(f'Left-edge pixel:  {px_left}')   # không đen = không black bar
+        print(f'Right-edge pixel: {px_right}')  # không đen = không black bar
+"
+```
+
 ## 3. Kiểm tra chapter bị thiếu ảnh
 
 Chapters có thể bị thiếu ảnh nếu CDN probe gặp network error trong lần download đầu.

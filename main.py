@@ -156,7 +156,19 @@ def run(args: argparse.Namespace) -> None:
     adapter = pick_adapter(args.url)
     manifest = Manifest(output_dir, args.title)
     downloader = Downloader(output_dir, delay=args.delay, error_log=error_log)
-    packager = Packager(output_dir, args.title, devices=devices)
+    packager = Packager(output_dir, args.title, devices=devices, fit_mode=args.fit_mode)
+
+    if args.force_repack:
+        deleted = []
+        for epub_file in output_dir.glob(f"{args.title}_ch*.epub"):
+            epub_file.unlink()
+            deleted.append(epub_file.name)
+        if deleted:
+            log.info(f"--force-repack: deleted {len(deleted)} EPUB(s): {', '.join(deleted)}")
+            # Reset packed chapters so the pack phase re-runs them
+            manifest.reset_to_downloaded(manifest.get_packed_chapters())
+        else:
+            log.info("--force-repack: no existing EPUBs found")
 
     # --- Gather chapter URLs ---
     if args.chapters_file:
@@ -280,6 +292,23 @@ def parse_args() -> argparse.Namespace:
         choices=["kindle", "kobo", "both"],
         default="both",
         help="Target e-reader device for image sizing (default: both — creates one EPUB per device)",
+    )
+    parser.add_argument(
+        "--fit-mode",
+        choices=["letterbox", "fill", "stretch"],
+        default="letterbox",
+        help=(
+            "How to fit images to screen (default: letterbox). "
+            "letterbox: preserve aspect ratio, add black bars if needed. "
+            "fill: scale to fill screen width, crop top/bottom if needed. "
+            "stretch: scale to fit full screen height, stretch width to fill — no bars, no crop, slight horizontal distortion."
+        ),
+    )
+    parser.add_argument(
+        "--force-repack",
+        action="store_true",
+        default=False,
+        help="Delete all existing EPUBs for this title and re-pack from downloaded images.",
     )
     return parser.parse_args()
 

@@ -98,6 +98,16 @@
 | Device-optimized EPUB (resize + fixed-layout) | Ảnh 756x1200 hẹp hơn màn hình → bị tràn khi dùng max-width:100% → cần resize về đúng device resolution + pre-paginated | 2026-06-01 |
 | `--target-device both` tạo 2 EPUB/batch | User dùng đồng thời Kindle PW5 + Kobo Libra 2 — 2 kích thước màn hình khác nhau | 2026-06-01 |
 
+## Decisions Made (tiếp theo)
+
+| Quyết định | Lý do | Ngày |
+|-----------|-------|------|
+| `--fit-mode fill` không phải default | Tránh phá EPUB cũ đã packed; user phải ghi tường minh | 2026-06-01 |
+| `stretch` mode thay vì `fill` cho manga Kobo | `fill` crop top/bottom gây mất chữ đầu/cuối trang; `stretch` giữ nguyên chiều dọc, chỉ kéo ngang ~12% | 2026-06-01 |
+| `--force-repack` xóa EPUB + reset manifest | Khi đổi fit-mode cần repack toàn bộ — xóa thủ công từng file rất bất tiện | 2026-06-01 |
+| `@page{margin:0}` trong CSS mỗi page | Kobo reader có thể tự thêm page margin — cần khai báo tường minh để override | 2026-06-01 |
+| `new_w = device_width` thay vì `int(img.width * scale)` | Float precision: với một số img.width, `int(...)` cho kết quả device_width-1 → 1px black column bên phải | 2026-06-01 |
+
 ## Critical Pitfalls
 
 - **Hotlinking protection**: Set `Referer` header đúng với URL của site khi download ảnh
@@ -110,3 +120,7 @@
 - **EPUB image paths**: ebooklib yêu cầu image items phải được add vào spine đúng thứ tự
 - **EPUB không dùng fixed-layout sẽ bị scroll**: Ảnh manga (~0.63 ratio) hẹp hơn màn hình e-reader (~0.74-0.75 ratio) → fill 100% width khiến height vượt màn hình → phải resize + `rendition:pre-paginated`
 - **EPUBs cũ (không có device suffix) vẫn được nhận dạng**: `_parse_epub_range()` xử lý cả 2 format. Muốn repack format mới: xóa EPUB cũ + chạy lại tool
+- **`--fit-mode fill` KHÔNG tự động áp dụng**: Default là `letterbox`. Nếu chạy lại mà không thêm flag này, EPUB sẽ giữ nguyên letterbox dù code đã có fill mode. Phải ghi tường minh `--fit-mode fill` mỗi lần.
+- **EPUB cũ không bị repack tự động khi đổi fit-mode**: `_reset_missing_epubs` chỉ reset khi EPUB file bị *xóa khỏi disk*. Nếu file còn đó, chapter vẫn là "packed" và tool bỏ qua. Dùng `--force-repack` để force delete + repack.
+- **`fill` mode crop nội dung — KHÔNG dùng cho manga**: `fill` scale theo chiều rộng → ảnh cao hơn màn hình → crop top/bottom đối xứng → mất chữ đầu/cuối trang. Dùng `stretch` thay thế: giữ nguyên chiều dọc, chỉ kéo ngang.
+- **`stretch` cho portrait, crop sides cho landscape**: `stretch` tự detect — nếu `new_w <= device_width` (portrait) thì stretch x; nếu `new_w > device_width` (landscape) thì crop sides. Logic trong `_resize_for_device`.

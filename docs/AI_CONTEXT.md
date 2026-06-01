@@ -79,6 +79,18 @@ Orchestrator (điều phối workflow)
 
 ## Changelog
 
+### 2026-06-01 — Thêm --fit-mode stretch (giữ chiều cao, kéo giãn chiều ngang)
+**Files thay đổi:** `src/packager.py`, `main.py`
+**Mô tả:** `fill` mode crop top/bottom gây mất chữ đầu/cuối trang. User muốn giữ nguyên chiều dọc, chỉ kéo giãn ngang để lấp đầy màn hình. Thêm `stretch` mode: scale theo chiều cao (device_height/img.height), sau đó stretch x từ new_w lên device_width. Không crop, không black bar, chỉ có slight horizontal distortion (~12% cho manga portrait trên Kobo). Portrait page: stretch x. Landscape page: crop sides. Lệnh: `--fit-mode stretch --force-repack`.
+
+### 2026-06-01 — --fit-mode fill, --force-repack, CSS @page fix
+**Files thay đổi:** `src/packager.py`, `main.py`
+**Mô tả:** Trang manga portrait hẹp hơn màn hình Kobo (tỉ lệ ~0.67 vs 0.75) gây 2 vệt đen 2 bên.
+- `--fit-mode fill`: scale ảnh theo đúng chiều rộng màn hình (new_w = device_width chính xác, không float error), crop top/bottom đối xứng nếu ảnh cao hơn màn hình. Default vẫn là `letterbox`.
+- `--force-repack`: xóa toàn bộ EPUB cũ + reset chapter về downloaded → pack lại. Dùng khi muốn đổi fit-mode mà không thao tác thủ công.
+- CSS: thêm `@page{margin:0;padding:0}` và `margin:0;padding:0` trên img để Kobo reader không tự thêm padding.
+**Lưu ý deploy:** Phải dùng `--fit-mode fill` tường minh (KHÔNG phải default). Để repack: `python main.py ... --fit-mode fill --target-device kobo --force-repack`.
+
 ### 2026-06-01 — Device-optimized EPUB packing (Kindle PW5 + Kobo Libra 2)
 **Files thay đổi:** `src/packager.py`, `main.py`
 **Mô tả:** Fix hoàn toàn vấn đề hiển thị ảnh trên máy đọc sách.
