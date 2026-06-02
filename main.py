@@ -72,6 +72,11 @@ def _count_folder_images(folder) -> int:
     return sum(1 for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.stat().st_size > 0)
 
 
+def _key_num(key: str) -> float:
+    """Convert chapter key ('001', '1000', '100_5') to float for numeric comparison."""
+    return float(key.replace("_", "."))
+
+
 def _parse_epub_range(stem: str) -> tuple[str, str] | None:
     """
     Parse (start_key, end_key) from an EPUB stem.
@@ -98,12 +103,12 @@ def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, t
         if parsed is None:
             continue
         start_key, end_key = parsed
-        if start_key <= chapter_key <= end_key:
+        if _key_num(start_key) <= _key_num(chapter_key) <= _key_num(end_key):
             log.info(f"Deleting stale EPUB: {epub_path.name} (chapter {chapter_key} was updated)")
             epub_path.unlink()
             packed_in_batch = [
                 k for k in manifest.get_packed_chapters()
-                if start_key <= k <= end_key
+                if _key_num(start_key) <= _key_num(k) <= _key_num(end_key)
             ]
             if packed_in_batch:
                 manifest.reset_to_downloaded(packed_in_batch)
@@ -133,7 +138,7 @@ def _reset_missing_epubs(
             continue
         start_key, end_key = parsed
         for key in packed_in_range:
-            if start_key <= key <= end_key:
+            if _key_num(start_key) <= _key_num(key) <= _key_num(end_key):
                 covered.add(key)
 
     uncovered = [k for k in packed_in_range if k not in covered]
