@@ -91,14 +91,14 @@ class Manifest:
 
     def get_downloaded_chapters(self) -> list[str]:
         return sorted(
-            k for k, v in self._data["chapters"].items()
-            if v.get("status") == "downloaded"
+            (k for k, v in self._data["chapters"].items() if v.get("status") == "downloaded"),
+            key=_chapter_num,
         )
 
     def get_packed_chapters(self) -> list[str]:
         return sorted(
-            k for k, v in self._data["chapters"].items()
-            if v.get("status") == "packed"
+            (k for k, v in self._data["chapters"].items() if v.get("status") == "packed"),
+            key=_chapter_num,
         )
 
     # ------------------------------------------------------------------
@@ -138,6 +138,11 @@ class Manifest:
         """Remove a chapter from manifest so it gets re-downloaded from scratch."""
         self._data["chapters"].pop(chapter_key, None)
         self.save()
+
+
+def _chapter_num(key: str) -> float:
+    """Convert chapter key ('001', '1000', '100_5') to float for numeric ordering."""
+    return float(key.replace("_", "."))
 
 
 def _count_images(folder: Path) -> int:

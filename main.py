@@ -73,6 +73,7 @@ def _count_folder_images(folder) -> int:
     return sum(1 for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.stat().st_size > 0)
 
 
+<<<<<<< HEAD
 def convert_to_azw3(epub_path: Path, log) -> Path | None:
     """
     Convert an EPUB to AZW3 using Calibre's ebook-convert CLI.
@@ -104,6 +105,11 @@ def convert_to_azw3(epub_path: Path, log) -> Path | None:
     except subprocess.TimeoutExpired:
         log.error(f"ebook-convert timed out for {epub_path.name}")
         return None
+=======
+def _key_num(key: str) -> float:
+    """Convert chapter key ('001', '1000', '100_5') to float for numeric comparison."""
+    return float(key.replace("_", "."))
+>>>>>>> 2b4b8ea2bd7e0177ede21a02f3bf9a2478733024
 
 
 def _parse_epub_range(stem: str) -> tuple[str, str] | None:
@@ -132,7 +138,7 @@ def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, t
         if parsed is None:
             continue
         start_key, end_key = parsed
-        if start_key <= chapter_key <= end_key:
+        if _key_num(start_key) <= _key_num(chapter_key) <= _key_num(end_key):
             log.info(f"Deleting stale EPUB: {epub_path.name} (chapter {chapter_key} was updated)")
             epub_path.unlink()
             azw3_path = epub_path.with_suffix(".azw3")
@@ -141,7 +147,7 @@ def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, t
                 azw3_path.unlink()
             packed_in_batch = [
                 k for k in manifest.get_packed_chapters()
-                if start_key <= k <= end_key
+                if _key_num(start_key) <= _key_num(k) <= _key_num(end_key)
             ]
             if packed_in_batch:
                 manifest.reset_to_downloaded(packed_in_batch)
@@ -165,6 +171,7 @@ def _reset_missing_epubs(
 
     # Build coverage from actual EPUB and AZW3 files on disk (any device variant counts)
     covered: set[str] = set()
+<<<<<<< HEAD
     for pattern in (f"{title}_ch*.epub", f"{title}_ch*.azw3"):
         for output_file in output_dir.glob(pattern):
             parsed = _parse_epub_range(output_file.stem)
@@ -174,6 +181,16 @@ def _reset_missing_epubs(
             for key in packed_in_range:
                 if start_key <= key <= end_key:
                     covered.add(key)
+=======
+    for epub_file in output_dir.glob(f"{title}_ch*.epub"):
+        parsed = _parse_epub_range(epub_file.stem)
+        if parsed is None:
+            continue
+        start_key, end_key = parsed
+        for key in packed_in_range:
+            if _key_num(start_key) <= _key_num(key) <= _key_num(end_key):
+                covered.add(key)
+>>>>>>> 2b4b8ea2bd7e0177ede21a02f3bf9a2478733024
 
     uncovered = [k for k in packed_in_range if k not in covered]
     if uncovered:
