@@ -8,6 +8,7 @@ Usage:
 import argparse
 import logging
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -72,6 +73,39 @@ def _count_folder_images(folder) -> int:
     return sum(1 for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.stat().st_size > 0)
 
 
+def convert_to_azw3(epub_path: Path, log) -> Path | None:
+    """
+    Convert an EPUB to AZW3 using Calibre's ebook-convert CLI.
+    Returns the AZW3 path on success, None on failure.
+    Calibre must be installed: https://calibre-ebook.com/download
+    """
+    azw3_path = epub_path.with_suffix(".azw3")
+    try:
+        result = subprocess.run(
+            [
+                "ebook-convert", str(epub_path), str(azw3_path),
+                "--output-profile", "kindle_pw3",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+        if result.returncode == 0:
+            log.info(f"AZW3 created: {azw3_path.name}")
+            return azw3_path
+        log.error(f"ebook-convert failed for {epub_path.name}:\n{result.stderr[-500:]}")
+        return None
+    except FileNotFoundError:
+        log.error(
+            "ebook-convert not found. Install Calibre and ensure it is on PATH: "
+            "https://calibre-ebook.com/download"
+        )
+        return None
+    except subprocess.TimeoutExpired:
+        log.error(f"ebook-convert timed out for {epub_path.name}")
+        return None
+
+
 def _parse_epub_range(stem: str) -> tuple[str, str] | None:
     """
     Parse (start_key, end_key) from an EPUB stem.
@@ -89,9 +123,9 @@ def _parse_epub_range(stem: str) -> tuple[str, str] | None:
 
 def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, title: str, log) -> None:
     """
-    When a previously-packed chapter is re-downloaded, find all EPUBs that
-    contain it (including device-suffixed variants), delete them, and reset all
-    chapters in that batch to 'downloaded' so the pack phase regenerates correct EPUBs.
+    When a previously-packed chapter is re-downloaded, find all EPUBs (and AZW3s)
+    that contain it (including device-suffixed variants), delete them, and reset all
+    chapters in that batch to 'downloaded' so the pack phase regenerates correct files.
     """
     for epub_path in output_dir.glob(f"{title}_ch*.epub"):
         parsed = _parse_epub_range(epub_path.stem)
@@ -101,6 +135,10 @@ def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, t
         if start_key <= chapter_key <= end_key:
             log.info(f"Deleting stale EPUB: {epub_path.name} (chapter {chapter_key} was updated)")
             epub_path.unlink()
+            azw3_path = epub_path.with_suffix(".azw3")
+            if azw3_path.exists():
+                log.info(f"Deleting stale AZW3: {azw3_path.name}")
+                azw3_path.unlink()
             packed_in_batch = [
                 k for k in manifest.get_packed_chapters()
                 if start_key <= k <= end_key
@@ -114,10 +152,10 @@ def _reset_missing_epubs(
     manifest, output_dir: Path, title: str, range_keys: list[str], log
 ) -> None:
     """
-    For packed chapters in the current run's range, check whether an EPUB file
-    actually covers each one. Reset uncovered chapters back to 'downloaded'.
+    For packed chapters in the current run's range, check whether an EPUB or AZW3
+    file actually covers each one. Reset uncovered chapters back to 'downloaded'.
 
-    Intentionally batch_size-independent: scans existing EPUB filenames instead
+    Intentionally batch_size-independent: scans existing filenames instead
     of recomputing expected paths. This prevents runaway resets when a user
     passes --batch-size that differs from the original packing run.
     """
@@ -125,16 +163,17 @@ def _reset_missing_epubs(
     if not packed_in_range:
         return
 
-    # Build coverage from actual EPUB files on disk (any device variant counts)
+    # Build coverage from actual EPUB and AZW3 files on disk (any device variant counts)
     covered: set[str] = set()
-    for epub_file in output_dir.glob(f"{title}_ch*.epub"):
-        parsed = _parse_epub_range(epub_file.stem)
-        if parsed is None:
-            continue
-        start_key, end_key = parsed
-        for key in packed_in_range:
-            if start_key <= key <= end_key:
-                covered.add(key)
+    for pattern in (f"{title}_ch*.epub", f"{title}_ch*.azw3"):
+        for output_file in output_dir.glob(pattern):
+            parsed = _parse_epub_range(output_file.stem)
+            if parsed is None:
+                continue
+            start_key, end_key = parsed
+            for key in packed_in_range:
+                if start_key <= key <= end_key:
+                    covered.add(key)
 
     uncovered = [k for k in packed_in_range if k not in covered]
     if uncovered:
@@ -160,15 +199,15 @@ def run(args: argparse.Namespace) -> None:
 
     if args.force_repack:
         deleted = []
-        for epub_file in output_dir.glob(f"{args.title}_ch*.epub"):
-            epub_file.unlink()
-            deleted.append(epub_file.name)
+        for pattern in (f"{args.title}_ch*.epub", f"{args.title}_ch*.azw3"):
+            for f in output_dir.glob(pattern):
+                f.unlink()
+                deleted.append(f.name)
         if deleted:
-            log.info(f"--force-repack: deleted {len(deleted)} EPUB(s): {', '.join(deleted)}")
-            # Reset packed chapters so the pack phase re-runs them
+            log.info(f"--force-repack: deleted {len(deleted)} file(s): {', '.join(deleted)}")
             manifest.reset_to_downloaded(manifest.get_packed_chapters())
         else:
-            log.info("--force-repack: no existing EPUBs found")
+            log.info("--force-repack: no existing output files found")
 
     # --- Gather chapter URLs ---
     if args.chapters_file:
@@ -271,6 +310,13 @@ def run(args: argparse.Namespace) -> None:
         for ep in epub_paths:
             log.info(f"Created: {ep}")
 
+        if args.output_format in ("azw3", "both"):
+            for ep in epub_paths:
+                azw3 = convert_to_azw3(ep, log)
+                if azw3 and args.output_format == "azw3":
+                    ep.unlink()
+                    log.info(f"Removed intermediate EPUB: {ep.name}")
+
     log.info("Done.")
 
 
@@ -308,7 +354,18 @@ def parse_args() -> argparse.Namespace:
         "--force-repack",
         action="store_true",
         default=False,
-        help="Delete all existing EPUBs for this title and re-pack from downloaded images.",
+        help="Delete all existing EPUBs/AZW3s for this title and re-pack from downloaded images.",
+    )
+    parser.add_argument(
+        "--output-format",
+        choices=["epub", "azw3", "both"],
+        default="epub",
+        help=(
+            "Output format (default: epub). "
+            "azw3: convert to AZW3 via Calibre ebook-convert, delete intermediate EPUB. "
+            "both: keep EPUB and also produce AZW3. "
+            "Requires Calibre installed: https://calibre-ebook.com/download"
+        ),
     )
     return parser.parse_args()
 

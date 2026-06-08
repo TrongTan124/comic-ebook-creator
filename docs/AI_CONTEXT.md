@@ -70,6 +70,10 @@ Orchestrator (điều phối workflow)
 | `--end-chapter` | No | None | Chapter kết thúc (inclusive), None = tất cả |
 | `--output-dir` | No | ./output | Thư mục output |
 | `--delay` | No | 1.5 | Delay giữa các request (giây) |
+| `--target-device` | No | `both` | `kindle`, `kobo`, hoặc `both`. Khi `both`, tạo 2 file/batch với suffix `_kindle` và `_kobo`. |
+| `--fit-mode` | No | `letterbox` | `letterbox`, `fill`, hoặc `stretch`. `stretch` khuyến nghị cho manga. |
+| `--output-format` | No | `epub` | `epub`, `azw3`, hoặc `both`. `azw3` dùng Calibre convert + xóa EPUB trung gian. |
+| `--force-repack` | No | false | Xóa EPUB+AZW3 cũ và pack lại từ ảnh đã download. |
 
 ## Environment Variables
 
@@ -78,6 +82,11 @@ Orchestrator (điều phối workflow)
 | Không có | — | Tool chạy hoàn toàn qua CLI args |
 
 ## Changelog
+
+### 2026-06-01 — Thêm --output-format azw3 (Calibre conversion)
+**Files thay đổi:** `main.py`
+**Mô tả:** Kindle PW5 không đọc EPUB trực tiếp qua USB — cần AZW3. Thêm `--output-format` với 3 giá trị: `epub` (default), `azw3` (convert qua Calibre ebook-convert, xóa EPUB trung gian), `both` (giữ cả hai). Calibre phải được cài và có trong PATH. `_reset_missing_epubs` và `_invalidate_epub_for_chapter` cũng được cập nhật để nhận dạng và xóa AZW3 files. Conversion dùng profile `--output-profile kindle_pw3`.
+**Lưu ý deploy:** Phải cài Calibre trước khi dùng `--output-format azw3/both`. Verify: `ebook-convert --version`.
 
 ### 2026-06-01 — Thêm --fit-mode stretch (giữ chiều cao, kéo giãn chiều ngang)
 **Files thay đổi:** `src/packager.py`, `main.py`
