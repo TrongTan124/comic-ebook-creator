@@ -118,8 +118,8 @@ def convert_to_azw3(
     """
     import zipfile as _zf
 
-    mobi_path = epub_path.with_suffix(".mobi")
-    cbz_path  = epub_path.with_suffix(".cbz")
+    mobi_path = epub_path.with_suffix(".mobi").resolve()
+    cbz_path  = epub_path.with_suffix(".cbz").resolve()
 
     # ------------------------------------------------------------------ #
     # Path 1 — KCC: true Image-Type MOBI, full-bleed on Kindle            #
@@ -136,7 +136,7 @@ def convert_to_azw3(
                 "-f", "MOBI",  # output format
                 "-s",          # stretch images to device resolution
                 "-c", "0",     # disable auto-crop (images are already clean)
-                "-o", str(epub_path.parent),
+                "-o", str(epub_path.parent.resolve()),
                 str(cbz_path),
             ],
             capture_output=True, text=True, timeout=600,
