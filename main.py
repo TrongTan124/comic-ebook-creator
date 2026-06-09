@@ -106,14 +106,18 @@ def convert_to_azw3(
     log,
 ) -> Path | None:
     """
-    Convert to Kindle-compatible file. Returns output path on success, None on failure.
+    Convert to Kindle MOBI. Returns .mobi path on success, None on failure.
+
+    Kindle reads MOBI/AZW3/KFX via USB — EPUB is NOT supported via USB copy.
 
     Strategy (in order):
-    1. KCC (-f EPUB): device-optimized fixed-layout EPUB for Kindle PW5.
-       No KindleGen required. Overwrites the intermediate EPUB in-place so
-       the caller sees the same path. Kindle PW5 firmware 5.12+ reads EPUB.
-    2. Calibre fallback: CBZ→MOBI via ebook-convert. Returns .mobi path.
-       Kindle may still show slight margins but file is readable.
+    1. KCC -f MOBI: full-bleed "Image Type" MOBI. Requires KindleGen in PATH.
+       KindleGen is bundled inside Kindle Previewer 3 (free from Amazon):
+       https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261
+       After installing KP3, add the bundled kindlegen to PATH or copy it
+       to a directory already on PATH.
+    2. Calibre CBZ→MOBI fallback: creates "Text Type" MOBI (margins ~1cm).
+       Readable but not full-bleed. Usable until KindleGen is available.
     """
     import zipfile as _zf
 
@@ -121,13 +125,11 @@ def convert_to_azw3(
     out_dir   = abs_epub.parent
     mobi_path = abs_epub.with_suffix(".mobi")
 
-    # KCC uses the CBZ stem as the output filename; use a unique stem so the
-    # output (.epub) doesn't collide with the intermediate EPUB we just built.
     kcc_cbz  = out_dir / (abs_epub.stem + "_kcc_in.cbz")
-    kcc_epub = out_dir / (abs_epub.stem + "_kcc_in.epub")
+    kcc_mobi = out_dir / (abs_epub.stem + "_kcc_in.mobi")
 
     # ------------------------------------------------------------------ #
-    # Path 1 — KCC: device-optimized EPUB, no KindleGen needed            #
+    # Path 1 — KCC -f MOBI: full-bleed Image-Type MOBI                   #
     # ------------------------------------------------------------------ #
     try:
         n = _pack_cbz(chapter_folders, kcc_cbz)
@@ -138,7 +140,7 @@ def convert_to_azw3(
             [
                 "kcc-c2e",
                 "-p", "KPW5",  # Kindle Paperwhite 5
-                "-f", "EPUB",  # EPUB output — no KindleGen required
+                "-f", "MOBI",  # MOBI output (needs KindleGen)
                 "-s",          # stretch to fill screen
                 "-c", "0",     # disable auto-crop
                 "-o", str(out_dir),
@@ -148,29 +150,35 @@ def convert_to_azw3(
         )
         kcc_cbz.unlink(missing_ok=True)
 
-        if result.returncode == 0 and kcc_epub.exists():
-            kcc_epub.replace(abs_epub)  # overwrite intermediate EPUB in-place
-            log.info(f"Kindle EPUB created via KCC: {abs_epub.name}")
-            return abs_epub
+        if result.returncode == 0 and kcc_mobi.exists():
+            kcc_mobi.replace(mobi_path)
+            log.info(f"MOBI created via KCC (full-bleed): {mobi_path.name}")
+            return mobi_path
 
-        log.warning(
-            f"KCC failed (rc={result.returncode}), falling back to Calibre\n"
-            f"KCC stdout: {result.stdout[:500]}"
-        )
+        stdout = result.stdout[:600]
+        if "KindleGen is missing" in stdout:
+            log.warning(
+                "KCC needs KindleGen for MOBI output.\n"
+                "Fix: install Kindle Previewer 3 (free, official from Amazon):\n"
+                "  https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261\n"
+                "Then copy bundled kindlegen.exe to PATH and re-run with --force-repack."
+            )
+        else:
+            log.warning(f"KCC failed (rc={result.returncode}): {stdout}")
+        log.info("Falling back to Calibre (MOBI with ~1cm margins)")
 
     except FileNotFoundError:
         kcc_cbz.unlink(missing_ok=True)
         log.info(
-            "KCC not found — install for full-bleed Kindle output: "
-            "https://github.com/ciromattia/kcc/releases  (Windows: KCC_*.exe)"
+            "KCC not found — install from https://github.com/ciromattia/kcc/releases"
         )
-        log.info("Falling back to Calibre (may have slight margins on Kindle)")
+        log.info("Falling back to Calibre (MOBI with ~1cm margins)")
     except Exception as exc:
         kcc_cbz.unlink(missing_ok=True)
         log.warning(f"KCC error ({exc}), falling back to Calibre")
 
     # ------------------------------------------------------------------ #
-    # Path 2 — Calibre fallback: pre-sized EPUB images → CBZ → MOBI      #
+    # Path 2 — Calibre CBZ→MOBI fallback (margins ~1cm on Kindle)        #
     # ------------------------------------------------------------------ #
     cbz_path = out_dir / (abs_epub.stem + "_cal_in.cbz")
     try:
@@ -211,7 +219,7 @@ def convert_to_azw3(
         cbz_path.unlink(missing_ok=True)
 
     if result.returncode == 0:
-        log.info(f"MOBI created via Calibre: {mobi_path.name}")
+        log.info(f"MOBI created via Calibre (margins ~1cm): {mobi_path.name}")
         return mobi_path
     log.error(f"ebook-convert failed:\n{result.stderr[-500:]}")
     return None
@@ -430,15 +438,10 @@ def run(args: argparse.Namespace) -> None:
         if args.output_format in ("azw3", "both"):
             folders_list = [f for f in folders if f]
             for ep in epub_paths:
-                kindle_file = convert_to_azw3(ep, folders_list, log)
-                if kindle_file:
-                    log.info(f"Kindle file ready: {kindle_file.name}")
-                # Only remove intermediate EPUB when output is a *different* file
-                # (Calibre MOBI case). KCC overwrites the EPUB in-place — don't delete.
-                if kindle_file and args.output_format == "azw3":
-                    if kindle_file.resolve() != ep.resolve():
-                        ep.unlink(missing_ok=True)
-                        log.info(f"Removed intermediate EPUB: {ep.name}")
+                mobi = convert_to_azw3(ep, folders_list, log)
+                if mobi and args.output_format == "azw3":
+                    ep.unlink(missing_ok=True)
+                    log.info(f"Removed intermediate EPUB: {ep.name}")
 
     log.info("Done.")
 
