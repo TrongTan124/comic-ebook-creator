@@ -39,11 +39,15 @@ python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
 # Output: one-piece_ch001-010_kobo.epub
 ```
 
-**Kindle Paperwhite 5** (AZW3, Calibre phải được cài):
+**Kindle Paperwhite 5** (MOBI via KCC — full-bleed, không margin):
 ```bash
+# Cài KCC một lần (cần thêm vào requirements nếu chưa có)
+pip install KindleComicConverter
+
 python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
   --target-device kindle --fit-mode stretch --output-format azw3 --start-chapter 1 --end-chapter 10
-# Output: one-piece_ch001-010_kindle.azw3  (EPUB trung gian bị xóa tự động)
+# Output: one-piece_ch001-010_kindle.mobi  (KCC tạo Image-Type MOBI, full-bleed thực sự)
+# Nếu KCC chưa cài: tool tự fallback Calibre CBZ→MOBI (có margin nhẹ)
 ```
 
 **Cả 2 device cùng lúc:**

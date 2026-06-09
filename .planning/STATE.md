@@ -110,6 +110,7 @@
 | `--output-format azw3` dùng Calibre | Kindle PW5 không đọc EPUB trực tiếp qua USB — cần AZW3; Calibre là converter duy nhất không cần Amazon toolchain | 2026-06-09 |
 | Kindle zero-margin metadata trong OPF | `zero-gutter/zero-margin/ke-border-width=0` báo Kindle không thêm margin; thiếu metadata này → ~1cm trắng 4 phía | 2026-06-09 |
 | Calibre `--margin-* 0 --no-inline-toc` | Calibre mặc định thêm margin khi convert; phải tắt tường minh | 2026-06-09 |
+| KCC thay Calibre cho Kindle MOBI | Calibre tạo "Text Type" MOBI → Kindle áp reading margin bất kể metadata; chỉ KCC tạo "Image Type" MOBI với EXTH records đúng chuẩn → full-bleed thực sự | 2026-06-09 |
 
 ## Critical Pitfalls
 

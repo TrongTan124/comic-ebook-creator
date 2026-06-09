@@ -83,6 +83,14 @@ Orchestrator (điều phối workflow)
 
 ## Changelog
 
+### 2026-06-09 — KCC integration: true Image-Type MOBI cho full-bleed Kindle
+**Files thay đổi:** `main.py`
+**Mô tả:** Root cause margin ~1cm trên Kindle: Calibre tạo "Text Type" MOBI (HTML + `<img>`) — Kindle áp dụng reading margin bất kể metadata. KCC tạo "Image Type" MOBI với MOBI EXTH records đúng chuẩn (`zero-gutter`, `zero-margin` ở binary level) → Kindle hiển thị full-bleed. Thay đổi:
+- Thêm `_pack_cbz(chapter_folders, cbz_path)`: pack ảnh gốc từ folder đã download vào CBZ (không qua resize EPUB)
+- Rewrite `convert_to_azw3(epub_path, chapter_folders, log)`: thử KCC trước (`kcc-c2e -p KPW5 -f MOBI -S`), fallback Calibre CBZ→MOBI nếu KCC không có
+- Update call site truyền `folders_list` vào `convert_to_azw3`
+**Lưu ý deploy:** Cài KCC để có kết quả tốt nhất: `pip install KindleComicConverter`. Nếu chưa cài, tool tự fallback Calibre (vẫn có margin nhẹ).
+
 ### 2026-06-01 — Fix full-bleed Kindle: đổi pipeline sang CBZ→MOBI
 **Files thay đổi:** `main.py`
 **Mô tả:** EPUB→AZW3 qua Calibre không set đúng MOBI EXTH records cho comic mode → Kindle render như reflowable document → margin 4 phía. Fix: `convert_to_azw3` giờ dùng pipeline CBZ→MOBI — extract ảnh từ EPUB → pack CBZ → Calibre convert CBZ→MOBI. CBZ input trigger Calibre's comic pipeline (không thêm margin). Output là `.mobi` thay vì `.azw3` (cả hai đọc được trên Kindle). Cập nhật `_invalidate_epub_for_chapter`, `_reset_missing_epubs`, `--force-repack` để handle `.mobi`.

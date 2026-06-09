@@ -73,25 +73,84 @@ def _count_folder_images(folder) -> int:
     return sum(1 for f in folder.iterdir() if f.suffix.lower() in IMAGE_EXTS and f.stat().st_size > 0)
 
 
-def convert_to_azw3(epub_path: Path, log) -> Path | None:
+def _pack_cbz(chapter_folders: list[Path], cbz_path: Path) -> int:
+    """Pack original downloaded images into a CBZ. Returns image count."""
+    import zipfile as _zf
+    count = 0
+    with _zf.ZipFile(cbz_path, "w", _zf.ZIP_STORED) as zf:
+        for ch_folder in chapter_folders:
+            for img in sorted(ch_folder.iterdir()):
+                if img.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+                    zf.write(img, f"{count:05d}{img.suffix}")
+                    count += 1
+    return count
+
+
+def convert_to_azw3(
+    epub_path: Path,
+    chapter_folders: list[Path],
+    log,
+) -> Path | None:
     """
-    Convert a Kindle EPUB to MOBI via Calibre's CBZ comic pipeline.
+    Convert to Kindle MOBI. Returns .mobi path on success, None on failure.
 
-    Pipeline: extract images from EPUB → temp CBZ → ebook-convert CBZ→MOBI.
-    Using CBZ input (not EPUB) forces Calibre into its comic reading path,
-    which does NOT add reflowable-document margins — fixing the ~1cm margin
-    issue seen when converting fixed-layout EPUB→AZW3 directly.
-
-    Output file is .mobi (readable on all Kindle devices via USB sideload).
-    Returns the .mobi path on success, None on failure.
-    Calibre must be installed: https://calibre-ebook.com/download
+    Strategy (in order):
+    1. KCC (pip install KindleComicConverter) — creates a true "Image Type"
+       MOBI that Kindle displays full-bleed with zero margins. Passes original
+       downloaded images so KCC applies its own per-device resizing.
+    2. Calibre fallback — CBZ→MOBI via ebook-convert. Kindle may still show
+       slight margins as Calibre creates "Text Type" MOBI, but better than
+       EPUB→AZW3 which adds even more margin.
     """
     import zipfile as _zf
 
-    cbz_path  = epub_path.with_suffix(".cbz")
     mobi_path = epub_path.with_suffix(".mobi")
+    cbz_path  = epub_path.with_suffix(".cbz")
 
-    # --- Step 1: extract pre-sized images from EPUB into a flat CBZ ---
+    # ------------------------------------------------------------------ #
+    # Path 1 — KCC: true Image-Type MOBI, full-bleed on Kindle            #
+    # ------------------------------------------------------------------ #
+    try:
+        n = _pack_cbz(chapter_folders, cbz_path)
+        if n == 0:
+            raise ValueError("chapter folders are empty")
+
+        result = subprocess.run(
+            [
+                "kcc-c2e",
+                "-p", "KPW5",   # Kindle Paperwhite 5 device profile
+                "-f", "MOBI",   # output format
+                "-S",           # stretch to fill screen (matches --fit-mode stretch)
+                "-o", str(epub_path.parent),
+                str(cbz_path),
+            ],
+            capture_output=True, text=True, timeout=600,
+        )
+        cbz_path.unlink(missing_ok=True)
+
+        if result.returncode == 0:
+            kcc_out = cbz_path.with_suffix(".mobi")
+            if kcc_out.exists():
+                if kcc_out != mobi_path:
+                    kcc_out.rename(mobi_path)
+                log.info(f"MOBI created via KCC: {mobi_path.name}")
+                return mobi_path
+        log.warning(f"KCC failed (rc={result.returncode}), falling back to Calibre")
+
+    except FileNotFoundError:
+        cbz_path.unlink(missing_ok=True)
+        log.info(
+            "KCC not found — install for best Kindle quality: "
+            "pip install KindleComicConverter"
+        )
+        log.info("Falling back to Calibre (may have slight margins on Kindle)")
+    except Exception as exc:
+        cbz_path.unlink(missing_ok=True)
+        log.warning(f"KCC error ({exc}), falling back to Calibre")
+
+    # ------------------------------------------------------------------ #
+    # Path 2 — Calibre fallback: pre-sized images from EPUB → CBZ → MOBI #
+    # ------------------------------------------------------------------ #
     try:
         with _zf.ZipFile(epub_path, "r") as epub_zip:
             image_names = sorted(
@@ -105,11 +164,10 @@ def convert_to_azw3(epub_path: Path, log) -> Path | None:
                 for i, name in enumerate(image_names):
                     cbz.writestr(f"{i:05d}.jpg", epub_zip.read(name))
     except Exception as exc:
-        log.error(f"CBZ creation failed for {epub_path.name}: {exc}")
+        log.error(f"CBZ creation failed: {exc}")
         cbz_path.unlink(missing_ok=True)
         return None
 
-    # --- Step 2: Calibre CBZ → MOBI (comic pipeline, no margins added) ---
     try:
         result = subprocess.run(
             [
@@ -117,28 +175,26 @@ def convert_to_azw3(epub_path: Path, log) -> Path | None:
                 "--output-profile", "kindle_pw3",
                 "--no-inline-toc",
             ],
-            capture_output=True,
-            text=True,
-            timeout=300,
+            capture_output=True, text=True, timeout=300,
         )
     except FileNotFoundError:
         cbz_path.unlink(missing_ok=True)
         log.error(
-            "ebook-convert not found. Install Calibre and ensure it is on PATH: "
+            "ebook-convert not found. Install Calibre: "
             "https://calibre-ebook.com/download"
         )
         return None
     except subprocess.TimeoutExpired:
         cbz_path.unlink(missing_ok=True)
-        log.error(f"ebook-convert timed out for {epub_path.name}")
+        log.error("ebook-convert timed out")
         return None
     finally:
         cbz_path.unlink(missing_ok=True)
 
     if result.returncode == 0:
-        log.info(f"MOBI created: {mobi_path.name}")
+        log.info(f"MOBI created via Calibre: {mobi_path.name}")
         return mobi_path
-    log.error(f"ebook-convert failed for {epub_path.name}:\n{result.stderr[-500:]}")
+    log.error(f"ebook-convert failed:\n{result.stderr[-500:]}")
     return None
 
 
@@ -353,8 +409,9 @@ def run(args: argparse.Namespace) -> None:
             log.info(f"Created: {ep}")
 
         if args.output_format in ("azw3", "both"):
+            folders_list = [f for f in folders if f]
             for ep in epub_paths:
-                mobi = convert_to_azw3(ep, log)  # outputs .mobi via CBZ pipeline
+                mobi = convert_to_azw3(ep, folders_list, log)
                 if mobi and args.output_format == "azw3":
                     ep.unlink()
                     log.info(f"Removed intermediate EPUB: {ep.name}")
