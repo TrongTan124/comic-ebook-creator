@@ -41,13 +41,15 @@ python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
 
 **Kindle Paperwhite 5** (MOBI via KCC — full-bleed, không margin):
 ```bash
-# Cài KCC một lần (cần thêm vào requirements nếu chưa có)
-pip install KindleComicConverter
+# Cài KCC một lần — là ứng dụng độc lập, KHÔNG phải pip package
+# Tải installer từ: https://github.com/ciromattia/kcc/releases
+# Chọn file KCC_*.exe cho Windows, chạy installer
+# Verify: kcc-c2e --version
 
-python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
+python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" `
   --target-device kindle --fit-mode stretch --output-format azw3 --start-chapter 1 --end-chapter 10
-# Output: one-piece_ch001-010_kindle.mobi  (KCC tạo Image-Type MOBI, full-bleed thực sự)
-# Nếu KCC chưa cài: tool tự fallback Calibre CBZ→MOBI (có margin nhẹ)
+# Output: one-piece_ch001-010_kindle.mobi  (KCC: Image-Type MOBI, full-bleed thực sự)
+# Nếu KCC chưa cài: tool tự fallback Calibre CBZ->MOBI (vẫn có margin nhe ~1cm)
 ```
 
 **Cả 2 device cùng lúc:**

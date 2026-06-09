@@ -3,4 +3,7 @@ beautifulsoup4>=4.12.0
 Pillow>=10.0.0
 ebooklib>=0.18
 lxml>=4.9.0
-KindleComicConverter>=7.2.0
+# Optional: install KCC (Kindle Comic Converter) for full-bleed Kindle MOBI output
+# KCC is a standalone app, NOT a pip package. Download from:
+# https://github.com/ciromattia/kcc/releases  (Windows: KCC_*.exe installer)
+# After install, verify: kcc-c2e --version
