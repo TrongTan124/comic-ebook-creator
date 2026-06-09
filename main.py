@@ -95,7 +95,7 @@ def convert_to_azw3(
     Convert to Kindle MOBI. Returns .mobi path on success, None on failure.
 
     Strategy (in order):
-    1. KCC (pip install KindleComicConverter) — creates a true "Image Type"
+    1. KCC (standalone app, install from https://github.com/ciromattia/kcc/releases) — creates a true "Image Type"
        MOBI that Kindle displays full-bleed with zero margins. Passes original
        downloaded images so KCC applies its own per-device resizing.
     2. Calibre fallback — CBZ→MOBI via ebook-convert. Kindle may still show
@@ -140,8 +140,8 @@ def convert_to_azw3(
     except FileNotFoundError:
         cbz_path.unlink(missing_ok=True)
         log.info(
-            "KCC not found — install for best Kindle quality: "
-            "pip install KindleComicConverter"
+            "KCC not found — install for full-bleed Kindle output: "
+            "https://github.com/ciromattia/kcc/releases  (Windows: KCC_*.exe installer)"
         )
         log.info("Falling back to Calibre (may have slight margins on Kindle)")
     except Exception as exc:
