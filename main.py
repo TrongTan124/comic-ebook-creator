@@ -106,78 +106,81 @@ def convert_to_azw3(
     log,
 ) -> Path | None:
     """
-    Convert to Kindle MOBI. Returns .mobi path on success, None on failure.
+    Convert to Kindle-compatible file. Returns output path on success, None on failure.
 
     Strategy (in order):
-    1. KCC (standalone app, install from https://github.com/ciromattia/kcc/releases) — creates a true "Image Type"
-       MOBI that Kindle displays full-bleed with zero margins. Passes original
-       downloaded images so KCC applies its own per-device resizing.
-    2. Calibre fallback — CBZ→MOBI via ebook-convert. Kindle may still show
-       slight margins as Calibre creates "Text Type" MOBI, but better than
-       EPUB→AZW3 which adds even more margin.
+    1. KCC (-f EPUB): device-optimized fixed-layout EPUB for Kindle PW5.
+       No KindleGen required. Overwrites the intermediate EPUB in-place so
+       the caller sees the same path. Kindle PW5 firmware 5.12+ reads EPUB.
+    2. Calibre fallback: CBZ→MOBI via ebook-convert. Returns .mobi path.
+       Kindle may still show slight margins but file is readable.
     """
     import zipfile as _zf
 
-    mobi_path = epub_path.with_suffix(".mobi").resolve()
-    cbz_path  = epub_path.with_suffix(".cbz").resolve()
+    abs_epub  = epub_path.resolve()
+    out_dir   = abs_epub.parent
+    mobi_path = abs_epub.with_suffix(".mobi")
+
+    # KCC uses the CBZ stem as the output filename; use a unique stem so the
+    # output (.epub) doesn't collide with the intermediate EPUB we just built.
+    kcc_cbz  = out_dir / (abs_epub.stem + "_kcc_in.cbz")
+    kcc_epub = out_dir / (abs_epub.stem + "_kcc_in.epub")
 
     # ------------------------------------------------------------------ #
-    # Path 1 — KCC: true Image-Type MOBI, full-bleed on Kindle            #
+    # Path 1 — KCC: device-optimized EPUB, no KindleGen needed            #
     # ------------------------------------------------------------------ #
     try:
-        n = _pack_cbz(chapter_folders, cbz_path)
+        n = _pack_cbz(chapter_folders, kcc_cbz)
         if n == 0:
             raise ValueError("chapter folders are empty")
 
         result = subprocess.run(
             [
                 "kcc-c2e",
-                "-p", "KPW5",  # Kindle Paperwhite 5 device profile
-                "-f", "MOBI",  # output format
-                "-s",          # stretch images to device resolution
-                "-c", "0",     # disable auto-crop (images are already clean)
-                "-o", str(epub_path.parent.resolve()),
-                str(cbz_path),
+                "-p", "KPW5",  # Kindle Paperwhite 5
+                "-f", "EPUB",  # EPUB output — no KindleGen required
+                "-s",          # stretch to fill screen
+                "-c", "0",     # disable auto-crop
+                "-o", str(out_dir),
+                str(kcc_cbz),
             ],
             capture_output=True, text=True, timeout=600,
         )
-        cbz_path.unlink(missing_ok=True)
+        kcc_cbz.unlink(missing_ok=True)
 
-        if result.returncode == 0:
-            kcc_out = cbz_path.with_suffix(".mobi")
-            if kcc_out.exists():
-                if kcc_out != mobi_path:
-                    kcc_out.rename(mobi_path)
-                log.info(f"MOBI created via KCC: {mobi_path.name}")
-                return mobi_path
+        if result.returncode == 0 and kcc_epub.exists():
+            kcc_epub.replace(abs_epub)  # overwrite intermediate EPUB in-place
+            log.info(f"Kindle EPUB created via KCC: {abs_epub.name}")
+            return abs_epub
+
         log.warning(
             f"KCC failed (rc={result.returncode}), falling back to Calibre\n"
-            f"KCC stdout: {result.stdout[:500]}\n"
-            f"KCC stderr: {result.stderr[:300]}"
+            f"KCC stdout: {result.stdout[:500]}"
         )
 
     except FileNotFoundError:
-        cbz_path.unlink(missing_ok=True)
+        kcc_cbz.unlink(missing_ok=True)
         log.info(
             "KCC not found — install for full-bleed Kindle output: "
-            "https://github.com/ciromattia/kcc/releases  (Windows: KCC_*.exe installer)"
+            "https://github.com/ciromattia/kcc/releases  (Windows: KCC_*.exe)"
         )
         log.info("Falling back to Calibre (may have slight margins on Kindle)")
     except Exception as exc:
-        cbz_path.unlink(missing_ok=True)
+        kcc_cbz.unlink(missing_ok=True)
         log.warning(f"KCC error ({exc}), falling back to Calibre")
 
     # ------------------------------------------------------------------ #
-    # Path 2 — Calibre fallback: pre-sized images from EPUB → CBZ → MOBI #
+    # Path 2 — Calibre fallback: pre-sized EPUB images → CBZ → MOBI      #
     # ------------------------------------------------------------------ #
+    cbz_path = out_dir / (abs_epub.stem + "_cal_in.cbz")
     try:
-        with _zf.ZipFile(epub_path, "r") as epub_zip:
+        with _zf.ZipFile(abs_epub, "r") as epub_zip:
             image_names = sorted(
                 n for n in epub_zip.namelist()
                 if "/images/" in n and n.lower().endswith((".jpg", ".jpeg", ".png"))
             )
             if not image_names:
-                log.error(f"No images found inside {epub_path.name}")
+                log.error(f"No images found inside {abs_epub.name}")
                 return None
             with _zf.ZipFile(cbz_path, "w", _zf.ZIP_STORED) as cbz:
                 for i, name in enumerate(image_names):
@@ -198,10 +201,7 @@ def convert_to_azw3(
         )
     except FileNotFoundError:
         cbz_path.unlink(missing_ok=True)
-        log.error(
-            "ebook-convert not found. Install Calibre: "
-            "https://calibre-ebook.com/download"
-        )
+        log.error("ebook-convert not found. Install Calibre: https://calibre-ebook.com/download")
         return None
     except subprocess.TimeoutExpired:
         cbz_path.unlink(missing_ok=True)
@@ -430,10 +430,15 @@ def run(args: argparse.Namespace) -> None:
         if args.output_format in ("azw3", "both"):
             folders_list = [f for f in folders if f]
             for ep in epub_paths:
-                mobi = convert_to_azw3(ep, folders_list, log)
-                if mobi and args.output_format == "azw3":
-                    ep.unlink()
-                    log.info(f"Removed intermediate EPUB: {ep.name}")
+                kindle_file = convert_to_azw3(ep, folders_list, log)
+                if kindle_file:
+                    log.info(f"Kindle file ready: {kindle_file.name}")
+                # Only remove intermediate EPUB when output is a *different* file
+                # (Calibre MOBI case). KCC overwrites the EPUB in-place — don't delete.
+                if kindle_file and args.output_format == "azw3":
+                    if kindle_file.resolve() != ep.resolve():
+                        ep.unlink(missing_ok=True)
+                        log.info(f"Removed intermediate EPUB: {ep.name}")
 
     log.info("Done.")
 
