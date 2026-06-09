@@ -47,7 +47,7 @@ class Packager:
         for device in self._devices:
             profile = DEVICE_PROFILES[device]
             name_suffix = f"_{device}" if multi else ""
-            epub_path = self._pack_for_device(chapter_keys, chapter_folders, profile, name_suffix)
+            epub_path = self._pack_for_device(chapter_keys, chapter_folders, profile, name_suffix, device)
             created.append(epub_path)
         return created
 
@@ -61,6 +61,7 @@ class Packager:
         chapter_folders: list[Path],
         profile: dict[str, int],
         name_suffix: str,
+        device: str = "",
     ) -> Path:
         start = chapter_keys[0]
         end = chapter_keys[-1]
@@ -78,6 +79,18 @@ class Packager:
         book.add_metadata("OPF", "meta", "pre-paginated", {"property": "rendition:layout"})
         book.add_metadata("OPF", "meta", "none",          {"property": "rendition:spread"})
         book.add_metadata("OPF", "meta", "portrait",      {"property": "rendition:orientation"})
+
+        # Kindle-specific: disable all margins and gutters for full-bleed comic display
+        if device == "kindle":
+            book.add_metadata(None, "meta", "", {"name": "book-type",     "content": "comic"})
+            book.add_metadata(None, "meta", "", {"name": "zero-gutter",   "content": "true"})
+            book.add_metadata(None, "meta", "", {"name": "zero-margin",   "content": "true"})
+            book.add_metadata(None, "meta", "", {"name": "ke-border-color","content": "#000000"})
+            book.add_metadata(None, "meta", "", {"name": "ke-border-width","content": "0"})
+            book.add_metadata(None, "meta", "", {
+                "name": "original-resolution",
+                "content": f"{profile['width']}x{profile['height']}",
+            })
 
         cover_set = False
         spine: list = ["nav"]

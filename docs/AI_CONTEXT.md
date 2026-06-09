@@ -83,6 +83,10 @@ Orchestrator (điều phối workflow)
 
 ## Changelog
 
+### 2026-06-01 — Fix margin ~1cm khi đọc manga trên Kindle
+**Files thay đổi:** `src/packager.py`, `main.py`
+**Mô tả:** Kindle hiển thị ~1cm margin 4 phía dù ảnh đã đúng 1072×1448. Nguyên nhân kép: (1) Calibre thêm margin mặc định khi convert EPUB→AZW3, (2) EPUB thiếu Kindle-specific OPF metadata. Fix: thêm `--margin-* 0 --no-inline-toc` vào `ebook-convert`; thêm `zero-gutter/zero-margin/book-type/ke-border-*/original-resolution` metadata vào OPF khi device=kindle. `_pack_for_device` nhận thêm tham số `device` để biết đâu là Kindle.
+
 ### 2026-06-01 — Thêm --output-format azw3 (Calibre conversion)
 **Files thay đổi:** `main.py`
 **Mô tả:** Kindle PW5 không đọc EPUB trực tiếp qua USB — cần AZW3. Thêm `--output-format` với 3 giá trị: `epub` (default), `azw3` (convert qua Calibre ebook-convert, xóa EPUB trung gian), `both` (giữ cả hai). Calibre phải được cài và có trong PATH. `_reset_missing_epubs` và `_invalidate_epub_for_chapter` cũng được cập nhật để nhận dạng và xóa AZW3 files. Conversion dùng profile `--output-profile kindle_pw3`.

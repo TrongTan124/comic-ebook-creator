@@ -107,6 +107,9 @@
 | `--force-repack` xóa EPUB + reset manifest | Khi đổi fit-mode cần repack toàn bộ — xóa thủ công từng file rất bất tiện | 2026-06-01 |
 | `@page{margin:0}` trong CSS mỗi page | Kobo reader có thể tự thêm page margin — cần khai báo tường minh để override | 2026-06-01 |
 | `new_w = device_width` thay vì `int(img.width * scale)` | Float precision: với một số img.width, `int(...)` cho kết quả device_width-1 → 1px black column bên phải | 2026-06-01 |
+| `--output-format azw3` dùng Calibre | Kindle PW5 không đọc EPUB trực tiếp qua USB — cần AZW3; Calibre là converter duy nhất không cần Amazon toolchain | 2026-06-09 |
+| Kindle zero-margin metadata trong OPF | `zero-gutter/zero-margin/ke-border-width=0` báo Kindle không thêm margin; thiếu metadata này → ~1cm trắng 4 phía | 2026-06-09 |
+| Calibre `--margin-* 0 --no-inline-toc` | Calibre mặc định thêm margin khi convert; phải tắt tường minh | 2026-06-09 |
 
 ## Critical Pitfalls
 
@@ -124,3 +127,6 @@
 - **EPUB cũ không bị repack tự động khi đổi fit-mode**: `_reset_missing_epubs` chỉ reset khi EPUB file bị *xóa khỏi disk*. Nếu file còn đó, chapter vẫn là "packed" và tool bỏ qua. Dùng `--force-repack` để force delete + repack.
 - **`fill` mode crop nội dung — KHÔNG dùng cho manga**: `fill` scale theo chiều rộng → ảnh cao hơn màn hình → crop top/bottom đối xứng → mất chữ đầu/cuối trang. Dùng `stretch` thay thế: giữ nguyên chiều dọc, chỉ kéo ngang.
 - **`stretch` cho portrait, crop sides cho landscape**: `stretch` tự detect — nếu `new_w <= device_width` (portrait) thì stretch x; nếu `new_w > device_width` (landscape) thì crop sides. Logic trong `_resize_for_device`.
+- **Kindle PW5 không đọc EPUB qua USB**: Chỉ đọc được AZW3/MOBI. Phải dùng `--output-format azw3` hoặc Send to Kindle. EPUB chỉ dùng cho Kobo.
+- **Git conflict markers → SyntaxError**: Sau merge/pull, luôn chạy `python -m py_compile main.py` trước khi dùng tool.
+- **PowerShell dùng `` ` `` không phải `\`**: Lệnh multi-line trong PowerShell dùng backtick (`` ` ``) để ngắt dòng, không phải backslash. Hoặc viết 1 dòng.

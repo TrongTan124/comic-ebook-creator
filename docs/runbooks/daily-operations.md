@@ -30,25 +30,38 @@ python main.py --help
 
 ## 2. Chạy tool
 
-### Download và pack 10 chapters
+### Lệnh chuẩn theo device
 
+**Kobo Libra 2** (EPUB, stretch mode):
 ```bash
-python main.py \
-  --url "https://onepiecetruyen.net/chapters" \
-  --title "one-piece" \
-  --start-chapter 1 \
-  --end-chapter 10
-
-# Verify
-ls output/one-piece/*.epub
-# Expected (default --target-device both):
-#   one-piece_ch001-010_kindle.epub   (1072x1448, ~73 MB)
-#   one-piece_ch001-010_kobo.epub     (1264x1680, ~90 MB)
-
-# Chỉ tạo cho 1 device:
-python main.py --url "..." --title "one-piece" --target-device kindle ...
-python main.py --url "..." --title "one-piece" --target-device kobo  ...
+python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
+  --target-device kobo --fit-mode stretch --start-chapter 1 --end-chapter 10
+# Output: one-piece_ch001-010_kobo.epub
 ```
+
+**Kindle Paperwhite 5** (AZW3, Calibre phải được cài):
+```bash
+python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
+  --target-device kindle --fit-mode stretch --output-format azw3 --start-chapter 1 --end-chapter 10
+# Output: one-piece_ch001-010_kindle.azw3  (EPUB trung gian bị xóa tự động)
+```
+
+**Cả 2 device cùng lúc:**
+```bash
+python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
+  --target-device both --fit-mode stretch --output-format both --start-chapter 1 --end-chapter 10
+# Output: _kobo.epub + _kindle.epub + _kindle.azw3
+```
+
+> **PowerShell**: dùng `` ` `` (backtick) để ngắt dòng, không phải `\`. Hoặc viết 1 dòng.
+
+### Định dạng theo device
+
+| Device | Format | Ghi chú |
+|--------|--------|---------|
+| Kobo Libra 2 | EPUB | Copy vào `/kobo/` qua USB |
+| Kindle PW5 | AZW3 | Copy vào `documents/` qua USB — EPUB không được nhận dạng |
+| Kindle (Send to Kindle) | EPUB | Upload lên amazon.com/sendtokindle |
 
 ### QUAN TRỌNG: Luôn chỉ định range rõ ràng
 

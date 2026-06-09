@@ -14,6 +14,7 @@
 | ERR-005 | CDN probe | `break` khi network error → probe dừng sớm, `total_pages` sai | 2026-06-01 | Fixed |
 | ERR-006 | `_reset_missing_epubs` | Dùng `batch_size` để tính EPUB path → sai khi batch_size thay đổi | 2026-06-01 | Fixed |
 | ERR-007 | Pack phase | Pool toàn bộ manifest → chapters 2 range khác bị gộp 1 EPUB khi có gap | 2026-06-01 | Fixed |
+| ERR-008 | main.py | Git merge conflict markers còn sót → SyntaxError khi chạy Python | 2026-06-09 | Fixed |
 
 ---
 
@@ -258,3 +259,31 @@ all_ready = [k for k in manifest.get_downloaded_chapters() if k in range_key_set
 **Verify:**
 - `--start-chapter 61 --end-chapter 70` → chỉ tạo `ch061-070.epub` ✅
 - `--start-chapter 161 --end-chapter 170` → chỉ tạo `ch161-170.epub` ✅
+
+---
+
+### ERR-008 — main.py: Git merge conflict markers gây SyntaxError
+
+**Thời gian:** 2026-06-09
+**Component:** `main.py`
+
+**Triệu chứng:**
+```
+File "main.py", line 117
+    >>>>>>> 2b4b8ea2bd7e0177ede21a02f3bf9a2478733024
+            ^
+SyntaxError: invalid decimal literal
+```
+
+**Nguyên nhân:**
+Commit `2b4b8ea` (fix chapter sort 1000+) thêm hàm `_key_num` và cập nhật `_reset_missing_epubs` để dùng numeric comparison. Khi tôi edit `main.py` cùng lúc (thêm `convert_to_azw3` và mở rộng `_reset_missing_epubs` để check cả `.azw3`), git tạo conflict markers nhưng không được resolve trước khi chạy.
+
+**Xử lý:**
+Resolve 2 conflict blocks:
+1. Giữ `convert_to_azw3` (HEAD) + thêm `_key_num` (branch) ngay sau
+2. Merge `_reset_missing_epubs`: check cả `.epub` và `.azw3` patterns (HEAD) + dùng `_key_num` cho numeric comparison (branch)
+
+**Verify:** `python -m py_compile main.py` → OK
+
+**Phòng ngừa:**
+Sau mỗi lần merge/pull, chạy `python -m py_compile main.py` để phát hiện conflict markers sót trước khi chạy tool.
