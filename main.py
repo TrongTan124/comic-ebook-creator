@@ -74,15 +74,29 @@ def _count_folder_images(folder) -> int:
 
 
 def _pack_cbz(chapter_folders: list[Path], cbz_path: Path) -> int:
-    """Pack original downloaded images into a CBZ. Returns image count."""
+    """Pack downloaded images into CBZ for KCC. Returns image count.
+
+    KCC does not support WebP — convert to JPEG in-memory before writing.
+    """
     import zipfile as _zf
+    from PIL import Image
+    from io import BytesIO
+
     count = 0
     with _zf.ZipFile(cbz_path, "w", _zf.ZIP_STORED) as zf:
         for ch_folder in chapter_folders:
-            for img in sorted(ch_folder.iterdir()):
-                if img.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
-                    zf.write(img, f"{count:05d}{img.suffix}")
-                    count += 1
+            for img_path in sorted(ch_folder.iterdir()):
+                ext = img_path.suffix.lower()
+                if ext not in (".jpg", ".jpeg", ".png", ".webp"):
+                    continue
+                if ext == ".webp":
+                    with Image.open(img_path) as img:
+                        buf = BytesIO()
+                        img.convert("RGB").save(buf, "JPEG", quality=92)
+                        zf.writestr(f"{count:05d}.jpg", buf.getvalue())
+                else:
+                    zf.write(img_path, f"{count:05d}{ext}")
+                count += 1
     return count
 
 
@@ -138,6 +152,7 @@ def convert_to_azw3(
                 return mobi_path
         log.warning(
             f"KCC failed (rc={result.returncode}), falling back to Calibre\n"
+            f"KCC stdout: {result.stdout[:500]}\n"
             f"KCC stderr: {result.stderr[:300]}"
         )
 
