@@ -118,9 +118,10 @@ def convert_to_azw3(
         result = subprocess.run(
             [
                 "kcc-c2e",
-                "-p", "KPW5",   # Kindle Paperwhite 5 device profile
-                "-f", "MOBI",   # output format
-                "-S",           # stretch to fill screen (matches --fit-mode stretch)
+                "-p", "KPW5",  # Kindle Paperwhite 5 device profile
+                "-f", "MOBI",  # output format
+                "-s",          # stretch images to device resolution
+                "-c", "0",     # disable auto-crop (images are already clean)
                 "-o", str(epub_path.parent),
                 str(cbz_path),
             ],
@@ -135,7 +136,10 @@ def convert_to_azw3(
                     kcc_out.rename(mobi_path)
                 log.info(f"MOBI created via KCC: {mobi_path.name}")
                 return mobi_path
-        log.warning(f"KCC failed (rc={result.returncode}), falling back to Calibre")
+        log.warning(
+            f"KCC failed (rc={result.returncode}), falling back to Calibre\n"
+            f"KCC stderr: {result.stderr[:300]}"
+        )
 
     except FileNotFoundError:
         cbz_path.unlink(missing_ok=True)
