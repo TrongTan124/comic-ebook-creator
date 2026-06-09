@@ -75,40 +75,75 @@ def _count_folder_images(folder) -> int:
 
 def convert_to_azw3(epub_path: Path, log) -> Path | None:
     """
-    Convert an EPUB to AZW3 using Calibre's ebook-convert CLI.
-    Returns the AZW3 path on success, None on failure.
+    Convert a Kindle EPUB to MOBI via Calibre's CBZ comic pipeline.
+
+    Pipeline: extract images from EPUB → temp CBZ → ebook-convert CBZ→MOBI.
+    Using CBZ input (not EPUB) forces Calibre into its comic reading path,
+    which does NOT add reflowable-document margins — fixing the ~1cm margin
+    issue seen when converting fixed-layout EPUB→AZW3 directly.
+
+    Output file is .mobi (readable on all Kindle devices via USB sideload).
+    Returns the .mobi path on success, None on failure.
     Calibre must be installed: https://calibre-ebook.com/download
     """
-    azw3_path = epub_path.with_suffix(".azw3")
+    import zipfile as _zf
+
+    cbz_path  = epub_path.with_suffix(".cbz")
+    mobi_path = epub_path.with_suffix(".mobi")
+
+    # --- Step 1: extract pre-sized images from EPUB into a flat CBZ ---
+    try:
+        with _zf.ZipFile(epub_path, "r") as epub_zip:
+            image_names = sorted(
+                n for n in epub_zip.namelist()
+                if "/images/" in n and n.lower().endswith((".jpg", ".jpeg", ".png"))
+            )
+            if not image_names:
+                log.error(f"No images found inside {epub_path.name}")
+                return None
+            with _zf.ZipFile(cbz_path, "w", _zf.ZIP_STORED) as cbz:
+                for i, name in enumerate(image_names):
+                    cbz.writestr(f"{i:05d}.jpg", epub_zip.read(name))
+    except Exception as exc:
+        log.error(f"CBZ creation failed for {epub_path.name}: {exc}")
+        cbz_path.unlink(missing_ok=True)
+        return None
+
+    # --- Step 2: Calibre CBZ → MOBI (comic pipeline, no margins added) ---
     try:
         result = subprocess.run(
             [
-                "ebook-convert", str(epub_path), str(azw3_path),
+                "ebook-convert", str(cbz_path), str(mobi_path),
                 "--output-profile", "kindle_pw3",
+                "--no-inline-toc",
                 "--margin-top",    "0",
                 "--margin-bottom", "0",
                 "--margin-left",   "0",
                 "--margin-right",  "0",
-                "--no-inline-toc",
             ],
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=300,
         )
-        if result.returncode == 0:
-            log.info(f"AZW3 created: {azw3_path.name}")
-            return azw3_path
-        log.error(f"ebook-convert failed for {epub_path.name}:\n{result.stderr[-500:]}")
-        return None
     except FileNotFoundError:
+        cbz_path.unlink(missing_ok=True)
         log.error(
             "ebook-convert not found. Install Calibre and ensure it is on PATH: "
             "https://calibre-ebook.com/download"
         )
         return None
     except subprocess.TimeoutExpired:
+        cbz_path.unlink(missing_ok=True)
         log.error(f"ebook-convert timed out for {epub_path.name}")
         return None
+    finally:
+        cbz_path.unlink(missing_ok=True)
+
+    if result.returncode == 0:
+        log.info(f"MOBI created: {mobi_path.name}")
+        return mobi_path
+    log.error(f"ebook-convert failed for {epub_path.name}:\n{result.stderr[-500:]}")
+    return None
 
 
 def _key_num(key: str) -> float:
@@ -145,10 +180,11 @@ def _invalidate_epub_for_chapter(chapter_key: str, manifest, output_dir: Path, t
         if _key_num(start_key) <= _key_num(chapter_key) <= _key_num(end_key):
             log.info(f"Deleting stale EPUB: {epub_path.name} (chapter {chapter_key} was updated)")
             epub_path.unlink()
-            azw3_path = epub_path.with_suffix(".azw3")
-            if azw3_path.exists():
-                log.info(f"Deleting stale AZW3: {azw3_path.name}")
-                azw3_path.unlink()
+            for stale_ext in (".azw3", ".mobi"):
+                stale = epub_path.with_suffix(stale_ext)
+                if stale.exists():
+                    log.info(f"Deleting stale {stale_ext[1:].upper()}: {stale.name}")
+                    stale.unlink()
             packed_in_batch = [
                 k for k in manifest.get_packed_chapters()
                 if _key_num(start_key) <= _key_num(k) <= _key_num(end_key)
@@ -175,7 +211,7 @@ def _reset_missing_epubs(
 
     # Build coverage from actual EPUB and AZW3 files on disk (any device variant counts)
     covered: set[str] = set()
-    for pattern in (f"{title}_ch*.epub", f"{title}_ch*.azw3"):
+    for pattern in (f"{title}_ch*.epub", f"{title}_ch*.azw3", f"{title}_ch*.mobi"):
         for output_file in output_dir.glob(pattern):
             parsed = _parse_epub_range(output_file.stem)
             if parsed is None:
@@ -209,7 +245,7 @@ def run(args: argparse.Namespace) -> None:
 
     if args.force_repack:
         deleted = []
-        for pattern in (f"{args.title}_ch*.epub", f"{args.title}_ch*.azw3"):
+        for pattern in (f"{args.title}_ch*.epub", f"{args.title}_ch*.azw3", f"{args.title}_ch*.mobi"):
             for f in output_dir.glob(pattern):
                 f.unlink()
                 deleted.append(f.name)
@@ -322,8 +358,8 @@ def run(args: argparse.Namespace) -> None:
 
         if args.output_format in ("azw3", "both"):
             for ep in epub_paths:
-                azw3 = convert_to_azw3(ep, log)
-                if azw3 and args.output_format == "azw3":
+                mobi = convert_to_azw3(ep, log)  # outputs .mobi via CBZ pipeline
+                if mobi and args.output_format == "azw3":
                     ep.unlink()
                     log.info(f"Removed intermediate EPUB: {ep.name}")
 

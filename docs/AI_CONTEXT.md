@@ -83,6 +83,10 @@ Orchestrator (điều phối workflow)
 
 ## Changelog
 
+### 2026-06-01 — Fix full-bleed Kindle: đổi pipeline sang CBZ→MOBI
+**Files thay đổi:** `main.py`
+**Mô tả:** EPUB→AZW3 qua Calibre không set đúng MOBI EXTH records cho comic mode → Kindle render như reflowable document → margin 4 phía. Fix: `convert_to_azw3` giờ dùng pipeline CBZ→MOBI — extract ảnh từ EPUB → pack CBZ → Calibre convert CBZ→MOBI. CBZ input trigger Calibre's comic pipeline (không thêm margin). Output là `.mobi` thay vì `.azw3` (cả hai đọc được trên Kindle). Cập nhật `_invalidate_epub_for_chapter`, `_reset_missing_epubs`, `--force-repack` để handle `.mobi`.
+
 ### 2026-06-01 — Fix margin ~1cm khi đọc manga trên Kindle
 **Files thay đổi:** `src/packager.py`, `main.py`
 **Mô tả:** Kindle hiển thị ~1cm margin 4 phía dù ảnh đã đúng 1072×1448. Nguyên nhân kép: (1) Calibre thêm margin mặc định khi convert EPUB→AZW3, (2) EPUB thiếu Kindle-specific OPF metadata. Fix: thêm `--margin-* 0 --no-inline-toc` vào `ebook-convert`; thêm `zero-gutter/zero-margin/book-type/ke-border-*/original-resolution` metadata vào OPF khi device=kindle. `_pack_for_device` nhận thêm tham số `device` để biết đâu là Kindle.
