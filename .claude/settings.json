@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile main.py)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit -m 'fix: remove --margin-* flags incompatible with CBZ input in ebook-convert *)",
+      "Bash(git commit -m 'fix: remove KindleComicConverter from pip requirements \\(standalone app, not pip\\) *)",
+      "Bash(git commit -m 'fix: correct KCC install instruction in log message \\(GitHub releases, not pip\\) *)",
+      "Bash(git commit -m 'fix: fix KCC -s flag \\(was uppercase -S\\) and add -c 0 to disable auto-crop *)",
+      "Bash(python -c ' *)",
+      "Bash(git commit -m 'fix: convert WebP to JPEG when packing CBZ for KCC *)",
+      "Bash(del \"output\\\\one-piece\\\\test_abs.cbz\")",
+      "Bash(Out-Null)",
+      "Bash(git commit -m 'fix: use absolute paths for KCC input/output *)",
+      "Bash(git commit -m 'fix: switch KCC to EPUB output \\(no KindleGen required\\) *)",
+      "Bash(git commit -m 'fix: revert KCC to MOBI output, add KindleGen/KP3 install guidance *)",
+      "Bash(git commit -m 'feat: use Kindle Previewer 3 CLI as primary EPUB->AZW3 converter *)",
+      "Bash(ls \"C:\\\\Users\\\\nguye\\\\AppData\\\\Local\\\\Amazon\\\\Kindle Previewer 3\\\\\" 2>/dev/null || echo \"not found\")",
+      "Read(//c/Users/nguye/AppData/Local/Amazon/Kindle Previewer 3\" 2>/dev/**)",
+      "Read(//c/Users/nguye/AppData/Local/Amazon/Kindle Previewer 3/**)",
+      "Bash(git commit -m 'fix: correct Kindle Previewer 3 exe name \\('\\\\''Kindle Previewer 3.exe'\\\\'' not '\\\\''KindlePreviewer.exe'\\\\''\\) *)",
+      "Bash(git commit -m 'fix: correct KP3 CLI argument order and scan for mobi/kpf output *)",
+      "Bash(python -m py_compile \"e:\\\\TanNT\\\\Github\\\\comic-ebook-creator\\\\main.py\")",
+      "Bash(git commit -m 'fix: use rglob to find KP3 output in Mobi/ subdirectory *)",
+      "Bash(git commit -m 'docs: update changelog, runbook, and pitfalls for KP3 pipeline *)",
+      "Bash(git commit -m 'docs: add ERR-009 to ERR-015 \\(KCC/KP3 pipeline fixes\\) *)"
+    ]
+  }
+}
