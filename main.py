@@ -146,22 +146,28 @@ def convert_to_azw3(
     # ------------------------------------------------------------------ #
     kp3_exe = _find_kindle_previewer()
     if kp3_exe:
-        before = {f.resolve() for f in out_dir.glob("*.azw3")}
+        # KP3 creates .mobi for fixed-layout/non-ET books (our manga EPUB),
+        # or .kpf/.azw3 for reflowable ET books. Capture all before/after.
+        _exts = ("*.azw3", "*.mobi", "*.kpf")
+        before = {f.resolve() for ext in _exts for f in out_dir.glob(ext)}
         try:
+            # Correct KP3 CLI syntax: input first, then -convert, then -output
             result = subprocess.run(
-                [kp3_exe, "-convert", str(abs_epub), "-output", str(out_dir)],
+                [kp3_exe, str(abs_epub), "-convert", "-output", str(out_dir)],
                 capture_output=True, text=True, timeout=300,
             )
-            after = {f.resolve() for f in out_dir.glob("*.azw3")}
-            new_azw3 = after - before
-            if result.returncode == 0 and new_azw3:
-                kp3_out = new_azw3.pop()
-                kp3_out.rename(azw3_path)
-                log.info(f"AZW3 created via Kindle Previewer 3 (full-bleed): {azw3_path.name}")
-                return azw3_path
+            after = {f.resolve() for ext in _exts for f in out_dir.glob(ext)}
+            new_files = after - before
+            if new_files:
+                kp3_out = new_files.pop()
+                # Rename to canonical path with correct suffix
+                final = out_dir / (abs_epub.stem + kp3_out.suffix)
+                kp3_out.rename(final)
+                log.info(f"Kindle file created via KP3 (full-bleed): {final.name}")
+                return final
             log.warning(
-                f"Kindle Previewer conversion failed (rc={result.returncode})\n"
-                f"stdout: {result.stdout[:300]}"
+                f"Kindle Previewer produced no output (rc={result.returncode})\n"
+                f"stdout: {result.stdout[:400]}"
             )
         except subprocess.TimeoutExpired:
             log.warning("Kindle Previewer timed out")
