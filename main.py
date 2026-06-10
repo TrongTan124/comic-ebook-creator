@@ -147,22 +147,29 @@ def convert_to_azw3(
     kp3_exe = _find_kindle_previewer()
     if kp3_exe:
         # KP3 creates .mobi for fixed-layout/non-ET books (our manga EPUB),
-        # or .kpf/.azw3 for reflowable ET books. Capture all before/after.
+        # or .kpf/.azw3 for reflowable ET books. Recurse into subdirs too.
         _exts = ("*.azw3", "*.mobi", "*.kpf")
-        before = {f.resolve() for ext in _exts for f in out_dir.glob(ext)}
+        before = {f.resolve() for ext in _exts for f in out_dir.rglob(ext)}
         try:
             # Correct KP3 CLI syntax: input first, then -convert, then -output
             result = subprocess.run(
                 [kp3_exe, str(abs_epub), "-convert", "-output", str(out_dir)],
                 capture_output=True, text=True, timeout=300,
             )
-            after = {f.resolve() for ext in _exts for f in out_dir.glob(ext)}
+            after = {f.resolve() for ext in _exts for f in out_dir.rglob(ext)}
             new_files = after - before
             if new_files:
                 kp3_out = new_files.pop()
-                # Rename to canonical path with correct suffix
+                # Move to canonical path at top level of out_dir
                 final = out_dir / (abs_epub.stem + kp3_out.suffix)
-                kp3_out.rename(final)
+                if kp3_out != final:
+                    kp3_out.rename(final)
+                    # Remove KP3 subdirectory (e.g. Mobi/) if now empty
+                    try:
+                        if kp3_out.parent != out_dir:
+                            kp3_out.parent.rmdir()
+                    except OSError:
+                        pass
                 log.info(f"Kindle file created via KP3 (full-bleed): {final.name}")
                 return final
             log.warning(
