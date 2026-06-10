@@ -15,6 +15,13 @@
 | ERR-006 | `_reset_missing_epubs` | Dùng `batch_size` để tính EPUB path → sai khi batch_size thay đổi | 2026-06-01 | Fixed |
 | ERR-007 | Pack phase | Pool toàn bộ manifest → chapters 2 range khác bị gộp 1 EPUB khi có gap | 2026-06-01 | Fixed |
 | ERR-008 | main.py | Git merge conflict markers còn sót → SyntaxError khi chạy Python | 2026-06-09 | Fixed |
+| ERR-009 | main.py / KCC | Flag `-S` (hoa) không tồn tại trong KCC → rc=2 | 2026-06-10 | Fixed |
+| ERR-010 | main.py / KCC | KCC không nhận `.webp` trong CBZ → "No matching files found" | 2026-06-10 | Fixed |
+| ERR-011 | main.py / KCC | KCC cần absolute path — relative path → "No matching files found" | 2026-06-10 | Fixed |
+| ERR-012 | main.py / KCC | KCC v10 cần KindleGen (deprecated) → chuyển sang Kindle Previewer 3 | 2026-06-10 | Fixed |
+| ERR-013 | main.py / KP3 | Tên exe KP3 là `Kindle Previewer 3.exe`, không phải `KindlePreviewer.exe` | 2026-06-10 | Fixed |
+| ERR-014 | main.py / KP3 | Argument order KP3 CLI sai (`-convert input` thay vì `input -convert`) | 2026-06-10 | Fixed |
+| ERR-015 | main.py / KP3 | KP3 output vào subdirectory `Mobi\` → `glob` không tìm thấy, cần `rglob` | 2026-06-10 | Fixed |
 
 ---
 
@@ -287,3 +294,106 @@ Resolve 2 conflict blocks:
 
 **Phòng ngừa:**
 Sau mỗi lần merge/pull, chạy `python -m py_compile main.py` để phát hiện conflict markers sót trước khi chạy tool.
+
+---
+
+### ERR-009 — KCC flag `-S` không tồn tại
+
+**Thời gian:** 2026-06-10
+**Component:** `main.py` — `convert_to_azw3`
+
+**Triệu chứng:** `KCC failed (rc=2), falling back to Calibre`
+
+**Nguyên nhân:** Dùng `-S` (hoa) thay vì `-s` (thường) cho flag stretch. KCC help: `-s, --stretch`.
+
+**Xử lý:** Đổi `-S` → `-s`.
+
+**Verify:** KCC chạy qua bước này, tiếp tục xử lý.
+
+---
+
+### ERR-010 — KCC không nhận `.webp` trong CBZ
+
+**Thời gian:** 2026-06-10
+**Component:** `main.py` — `_pack_cbz`
+
+**Triệu chứng:** `No matching files found.` (KCC rc=1)
+
+**Nguyên nhân:** Chapter folders chứa `.webp` từ CDN. KCC không xử lý WebP — chỉ nhận JPEG/PNG.
+
+**Xử lý:** Trong `_pack_cbz`, convert `.webp` → JPEG in-memory (Pillow, quality=92) trước khi write vào CBZ.
+
+**Verify:** KCC nhận file, tiến tới bước tiếp theo.
+
+---
+
+### ERR-011 — KCC cần absolute path
+
+**Thời gian:** 2026-06-10
+**Component:** `main.py` — `convert_to_azw3`
+
+**Nguyên nhân:** `str(cbz_path)` với relative path → KCC báo "No matching files found." (dù file tồn tại).
+
+**Xử lý:** Dùng `.resolve()` cho `cbz_path`, `mobi_path`, và `epub_path.parent` khi truyền vào subprocess.
+
+**Verify:** KCC bắt đầu xử lý `Working on E:\...`.
+
+---
+
+### ERR-012 — KCC v10 cần KindleGen (đã bị deprecated)
+
+**Thời gian:** 2026-06-10
+**Component:** `main.py` — `convert_to_azw3`
+
+**Triệu chứng:** `ERROR: KindleGen is missing!`
+
+**Nguyên nhân:** KCC v10 dùng KindleGen để tạo MOBI. Amazon ngừng cung cấp KindleGen từ 2021.
+
+**Xử lý:** Chuyển primary pipeline sang Kindle Previewer 3 CLI (tool chính thức từ Amazon, miễn phí). KP3 convert fixed-layout EPUB → MOBI đúng chuẩn. Calibre CBZ→MOBI giữ làm fallback.
+
+**Verify:** KP3 tạo được `one-piece_ch001-010.mobi`.
+
+---
+
+### ERR-013 — Tên exe KP3 sai
+
+**Thời gian:** 2026-06-10
+**Component:** `main.py` — `_find_kindle_previewer`
+
+**Triệu chứng:** `Kindle Previewer 3 not found` dù đã cài.
+
+**Nguyên nhân:** Code tìm `KindlePreviewer.exe`. Amazon đặt tên file thực tế là `Kindle Previewer 3.exe` (có khoảng trắng).
+
+**Xử lý:** Cập nhật `_find_kindle_previewer` tìm cả `Kindle Previewer 3.exe`.
+
+**Verify:** `_find_kindle_previewer()` trả về đúng path.
+
+---
+
+### ERR-014 — Argument order KP3 CLI sai
+
+**Thời gian:** 2026-06-10
+**Component:** `main.py` — `convert_to_azw3`
+
+**Triệu chứng:** `Unknown file given as input.` + rc=0 (KP3 exit 0 kể cả khi lỗi usage)
+
+**Nguyên nhân:** Code gọi `[kp3_exe, "-convert", str(abs_epub), "-output", ...]`. KP3 syntax yêu cầu: `kindlepreviewer <input> -convert -output <dir>` — input phải đứng trước command.
+
+**Xử lý:** Đổi thành `[kp3_exe, str(abs_epub), "-convert", "-output", str(out_dir)]`.
+
+**Verify:** KP3 hiện `Pre-processing in progress.` và xử lý file.
+
+---
+
+### ERR-015 — KP3 output vào subdirectory `Mobi\`
+
+**Thời gian:** 2026-06-10
+**Component:** `main.py` — `convert_to_azw3`
+
+**Triệu chứng:** `Kindle Previewer produced no output (rc=0)` dù KP3 báo "Book converted successfully!"
+
+**Nguyên nhân:** KP3 tạo output trong `Mobi\` subdirectory bên trong output folder, không phải top-level. `out_dir.glob("*.mobi")` không tìm thấy.
+
+**Xử lý:** Đổi sang `out_dir.rglob("*.mobi")` (và `.azw3`, `.kpf`). Sau khi tìm thấy file, rename về top-level, xóa subdirectory `Mobi\` nếu rỗng.
+
+**Verify:** `Kindle file created via KP3 (full-bleed): one-piece_ch001-010.mobi`
