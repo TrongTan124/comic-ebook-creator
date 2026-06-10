@@ -128,6 +128,8 @@
 - **EPUB cũ không bị repack tự động khi đổi fit-mode**: `_reset_missing_epubs` chỉ reset khi EPUB file bị *xóa khỏi disk*. Nếu file còn đó, chapter vẫn là "packed" và tool bỏ qua. Dùng `--force-repack` để force delete + repack.
 - **`fill` mode crop nội dung — KHÔNG dùng cho manga**: `fill` scale theo chiều rộng → ảnh cao hơn màn hình → crop top/bottom đối xứng → mất chữ đầu/cuối trang. Dùng `stretch` thay thế: giữ nguyên chiều dọc, chỉ kéo ngang.
 - **`stretch` cho portrait, crop sides cho landscape**: `stretch` tự detect — nếu `new_w <= device_width` (portrait) thì stretch x; nếu `new_w > device_width` (landscape) thì crop sides. Logic trong `_resize_for_device`.
-- **Kindle PW5 không đọc EPUB qua USB**: Chỉ đọc được AZW3/MOBI. Phải dùng `--output-format azw3` hoặc Send to Kindle. EPUB chỉ dùng cho Kobo.
+- **Kindle PW5 không đọc EPUB qua USB**: Chỉ đọc được MOBI/AZW3/KFX qua USB. Phải dùng `--output-format azw3`. EPUB chỉ dùng cho Kobo hoặc Send to Kindle (cloud).
+- **Kindle Previewer 3 pipeline**: KP3 CLI tạo full-bleed MOBI từ fixed-layout EPUB. Exe tên `Kindle Previewer 3.exe` (có khoảng trắng). Output vào subdirectory `Mobi\` — cần rglob. Argument order: `input -convert -output dir`.
+- **KindleGen deprecated**: Không còn download được từ Amazon. Dùng Kindle Previewer 3 thay thế.
 - **Git conflict markers → SyntaxError**: Sau merge/pull, luôn chạy `python -m py_compile main.py` trước khi dùng tool.
 - **PowerShell dùng `` ` `` không phải `\`**: Lệnh multi-line trong PowerShell dùng backtick (`` ` ``) để ngắt dòng, không phải backslash. Hoặc viết 1 dòng.

@@ -83,6 +83,17 @@ Orchestrator (điều phối workflow)
 
 ## Changelog
 
+### 2026-06-10 — Kindle Previewer 3 CLI pipeline hoàn chỉnh
+**Files thay đổi:** `main.py`
+**Mô tả:** Pipeline Kindle đầy đủ: packager tạo fixed-layout EPUB → Kindle Previewer 3 CLI convert → `.mobi` full-bleed. Các fix trong session này:
+- KindleGen deprecated → dùng KP3 thay thế (free, chính thức từ Amazon)
+- EPUB không đọc được trên Kindle qua USB (chỉ MOBI/AZW3/KFX qua USB)
+- Tên exe KP3 là `Kindle Previewer 3.exe` (có khoảng trắng), không phải `KindlePreviewer.exe`
+- Argument order KP3 CLI: `input -convert -output dir` (không phải `-convert input`)
+- KP3 tạo output trong subdirectory `Mobi\` → cần `rglob` thay vì `glob`
+- Sau khi rename, xóa subdirectory `Mobi\` nếu rỗng
+**Lưu ý deploy:** Cài Kindle Previewer 3 từ Amazon. Tool tự tìm exe ở `%LOCALAPPDATA%\Amazon\Kindle Previewer 3\`. Fallback Calibre vẫn hoạt động nếu KP3 không có.
+
 ### 2026-06-09 — KCC integration: true Image-Type MOBI cho full-bleed Kindle
 **Files thay đổi:** `main.py`
 **Mô tả:** Root cause margin ~1cm trên Kindle: Calibre tạo "Text Type" MOBI (HTML + `<img>`) — Kindle áp dụng reading margin bất kể metadata. KCC tạo "Image Type" MOBI với MOBI EXTH records đúng chuẩn (`zero-gutter`, `zero-margin` ở binary level) → Kindle hiển thị full-bleed. Thay đổi:

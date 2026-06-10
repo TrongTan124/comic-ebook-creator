@@ -39,17 +39,20 @@ python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" \
 # Output: one-piece_ch001-010_kobo.epub
 ```
 
-**Kindle Paperwhite 5** (MOBI via KCC — full-bleed, không margin):
+**Kindle Paperwhite 5** (MOBI via Kindle Previewer 3 — full-bleed, không margin):
 ```bash
-# Cài KCC một lần — là ứng dụng độc lập, KHÔNG phải pip package
-# Tải installer từ: https://github.com/ciromattia/kcc/releases
-# Chọn file KCC_*.exe cho Windows, chạy installer
-# Verify: kcc-c2e --version
+# Yêu cầu: cài Kindle Previewer 3 (miễn phí, chính thức từ Amazon)
+# Tải tại: https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261
+# Cài xong: tool tự tìm exe ở %LOCALAPPDATA%\Amazon\Kindle Previewer 3\
 
 python main.py --url "https://onepiecetruyen.net/chapters" --title "one-piece" `
-  --target-device kindle --fit-mode stretch --output-format azw3 --start-chapter 1 --end-chapter 10
-# Output: one-piece_ch001-010_kindle.mobi  (KCC: Image-Type MOBI, full-bleed thực sự)
-# Nếu KCC chưa cài: tool tự fallback Calibre CBZ->MOBI (vẫn có margin nhe ~1cm)
+  --target-device kindle --fit-mode stretch --output-format azw3 `
+  --start-chapter 1 --end-chapter 10
+# Output: one-piece_ch001-010.mobi  (KP3: full-bleed thực sự)
+# Nếu KP3 chưa cài: tool tự fallback Calibre CBZ->MOBI (vẫn có margin ~1cm)
+
+# QUAN TRỌNG: Copy file .mobi (KHÔNG phải .epub) vào documents\ trên Kindle qua USB
+# EPUB KHÔNG được nhận dạng khi copy USB — chỉ MOBI/AZW3/KFX qua USB
 ```
 
 **Cả 2 device cùng lúc:**
