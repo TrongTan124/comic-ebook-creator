@@ -103,14 +103,18 @@ def _pack_cbz(chapter_folders: list[Path], cbz_path: Path) -> int:
 def _find_kindle_previewer() -> str | None:
     """Find Kindle Previewer 3 executable on Windows."""
     import os
-    candidates = [
-        os.path.expandvars(r"%LOCALAPPDATA%\Amazon\Kindle Previewer 3\KindlePreviewer.exe"),
-        r"C:\Program Files\Amazon\Kindle Previewer 3\KindlePreviewer.exe",
-        r"C:\Program Files (x86)\Amazon\Kindle Previewer 3\KindlePreviewer.exe",
+    base_dirs = [
+        os.path.expandvars(r"%LOCALAPPDATA%\Amazon\Kindle Previewer 3"),
+        r"C:\Program Files\Amazon\Kindle Previewer 3",
+        r"C:\Program Files (x86)\Amazon\Kindle Previewer 3",
     ]
-    for p in candidates:
-        if Path(p).exists():
-            return p
+    # Amazon ships it as "Kindle Previewer 3.exe" (with spaces)
+    exe_names = ["Kindle Previewer 3.exe", "KindlePreviewer.exe", "kindlepreviewer.exe"]
+    for base in base_dirs:
+        for exe in exe_names:
+            p = Path(base) / exe
+            if p.exists():
+                return str(p)
     return None
 
 
