@@ -100,82 +100,76 @@ def _pack_cbz(chapter_folders: list[Path], cbz_path: Path) -> int:
     return count
 
 
+def _find_kindle_previewer() -> str | None:
+    """Find Kindle Previewer 3 executable on Windows."""
+    import os
+    candidates = [
+        os.path.expandvars(r"%LOCALAPPDATA%\Amazon\Kindle Previewer 3\KindlePreviewer.exe"),
+        r"C:\Program Files\Amazon\Kindle Previewer 3\KindlePreviewer.exe",
+        r"C:\Program Files (x86)\Amazon\Kindle Previewer 3\KindlePreviewer.exe",
+    ]
+    for p in candidates:
+        if Path(p).exists():
+            return p
+    return None
+
+
 def convert_to_azw3(
     epub_path: Path,
     chapter_folders: list[Path],
     log,
 ) -> Path | None:
     """
-    Convert to Kindle MOBI. Returns .mobi path on success, None on failure.
+    Convert to Kindle AZW3/MOBI. Returns output path on success, None on failure.
 
-    Kindle reads MOBI/AZW3/KFX via USB — EPUB is NOT supported via USB copy.
+    Kindle reads AZW3/MOBI/KFX via USB — EPUB is NOT supported via USB copy.
 
     Strategy (in order):
-    1. KCC -f MOBI: full-bleed "Image Type" MOBI. Requires KindleGen in PATH.
-       KindleGen is bundled inside Kindle Previewer 3 (free from Amazon):
-       https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261
-       After installing KP3, add the bundled kindlegen to PATH or copy it
-       to a directory already on PATH.
+    1. Kindle Previewer 3 CLI: converts our fixed-layout EPUB → AZW3 directly.
+       Best option: KP3 preserves fixed-layout properties → full-bleed on Kindle.
+       Install KP3 (free, official): https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261
     2. Calibre CBZ→MOBI fallback: creates "Text Type" MOBI (margins ~1cm).
-       Readable but not full-bleed. Usable until KindleGen is available.
     """
     import zipfile as _zf
 
-    abs_epub  = epub_path.resolve()
-    out_dir   = abs_epub.parent
+    abs_epub = epub_path.resolve()
+    out_dir  = abs_epub.parent
+    azw3_path = abs_epub.with_suffix(".azw3")
     mobi_path = abs_epub.with_suffix(".mobi")
 
-    kcc_cbz  = out_dir / (abs_epub.stem + "_kcc_in.cbz")
-    kcc_mobi = out_dir / (abs_epub.stem + "_kcc_in.mobi")
-
     # ------------------------------------------------------------------ #
-    # Path 1 — KCC -f MOBI: full-bleed Image-Type MOBI                   #
+    # Path 1 — Kindle Previewer 3 CLI: fixed-layout EPUB → AZW3          #
     # ------------------------------------------------------------------ #
-    try:
-        n = _pack_cbz(chapter_folders, kcc_cbz)
-        if n == 0:
-            raise ValueError("chapter folders are empty")
-
-        result = subprocess.run(
-            [
-                "kcc-c2e",
-                "-p", "KPW5",  # Kindle Paperwhite 5
-                "-f", "MOBI",  # MOBI output (needs KindleGen)
-                "-s",          # stretch to fill screen
-                "-c", "0",     # disable auto-crop
-                "-o", str(out_dir),
-                str(kcc_cbz),
-            ],
-            capture_output=True, text=True, timeout=600,
-        )
-        kcc_cbz.unlink(missing_ok=True)
-
-        if result.returncode == 0 and kcc_mobi.exists():
-            kcc_mobi.replace(mobi_path)
-            log.info(f"MOBI created via KCC (full-bleed): {mobi_path.name}")
-            return mobi_path
-
-        stdout = result.stdout[:600]
-        if "KindleGen is missing" in stdout:
-            log.warning(
-                "KCC needs KindleGen for MOBI output.\n"
-                "Fix: install Kindle Previewer 3 (free, official from Amazon):\n"
-                "  https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261\n"
-                "Then copy bundled kindlegen.exe to PATH and re-run with --force-repack."
+    kp3_exe = _find_kindle_previewer()
+    if kp3_exe:
+        before = {f.resolve() for f in out_dir.glob("*.azw3")}
+        try:
+            result = subprocess.run(
+                [kp3_exe, "-convert", str(abs_epub), "-output", str(out_dir)],
+                capture_output=True, text=True, timeout=300,
             )
-        else:
-            log.warning(f"KCC failed (rc={result.returncode}): {stdout}")
+            after = {f.resolve() for f in out_dir.glob("*.azw3")}
+            new_azw3 = after - before
+            if result.returncode == 0 and new_azw3:
+                kp3_out = new_azw3.pop()
+                kp3_out.rename(azw3_path)
+                log.info(f"AZW3 created via Kindle Previewer 3 (full-bleed): {azw3_path.name}")
+                return azw3_path
+            log.warning(
+                f"Kindle Previewer conversion failed (rc={result.returncode})\n"
+                f"stdout: {result.stdout[:300]}"
+            )
+        except subprocess.TimeoutExpired:
+            log.warning("Kindle Previewer timed out")
+        except Exception as exc:
+            log.warning(f"Kindle Previewer error: {exc}")
         log.info("Falling back to Calibre (MOBI with ~1cm margins)")
-
-    except FileNotFoundError:
-        kcc_cbz.unlink(missing_ok=True)
+    else:
         log.info(
-            "KCC not found — install from https://github.com/ciromattia/kcc/releases"
+            "Kindle Previewer 3 not found — install for full-bleed AZW3 output:\n"
+            "  https://www.amazon.com/gp/feature.html?ie=UTF8&docId=1000765261\n"
+            "Falling back to Calibre (MOBI with ~1cm margins)"
         )
-        log.info("Falling back to Calibre (MOBI with ~1cm margins)")
-    except Exception as exc:
-        kcc_cbz.unlink(missing_ok=True)
-        log.warning(f"KCC error ({exc}), falling back to Calibre")
 
     # ------------------------------------------------------------------ #
     # Path 2 — Calibre CBZ→MOBI fallback (margins ~1cm on Kindle)        #
